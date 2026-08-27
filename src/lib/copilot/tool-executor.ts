@@ -191,14 +191,6 @@ export type CopilotToolExecutionContext = {
   copilotListSkillReferences?: (skillId?: string) => Record<string, unknown>;
   copilotReadSkillReference?: (skillId: string, referenceId: string, options?: { endLine?: number; maxChars?: number; startLine?: number }) => Record<string, unknown>;
   copilotSearchSkillReferences?: (query: string, options?: { maxResults?: number; referenceIds?: string[]; skillId?: string }) => Record<string, unknown>;
-  morphusCreateFile?: (path: string, content: string) => Record<string, unknown>;
-  morphusListFiles?: () => Record<string, unknown>;
-  morphusReadFile?: (path: string, options?: { endLine?: number; maxChars?: number; startLine?: number }) => Record<string, unknown>;
-  morphusSearchFiles?: (query: string, options?: { includeAssets?: boolean; maxResults?: number; pathGlob?: string; useRegex?: boolean }) => Record<string, unknown>;
-  morphusRequestDeleteFile?: (path: string, reason: string) => Record<string, unknown>;
-  morphusRequestRenameFile?: (fromPath: string, toPath: string, reason: string) => Record<string, unknown>;
-  morphusWriteFile?: (path: string, content: string) => Record<string, unknown>;
-  onGeneratedGame?: (title: string, html: string, files?: Array<{ content: string; path: string }>) => void;
 };
 
 function num(args: Args, key: string, fallback = 0): number {
@@ -238,22 +230,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function recordArray(args: Args, key: string): Record<string, unknown>[] {
   const value = args[key];
   return Array.isArray(value) ? value.filter((entry): entry is Record<string, unknown> => isRecord(entry)) : [];
-}
-
-function fileBundle(value: unknown): Array<{ content: string; path: string }> {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.flatMap((entry) => {
-    if (!isRecord(entry)) {
-      return [];
-    }
-
-    const path = typeof entry.path === "string" ? entry.path.trim() : "";
-    const content = typeof entry.content === "string" ? entry.content : "";
-    return path && content ? [{ content, path }] : [];
-  });
 }
 
 const MODELING_GROUP_COLORS = ["#f59e0b", "#10b981", "#38bdf8", "#f472b6", "#a78bfa", "#fb7185"];
@@ -3611,73 +3587,6 @@ async function executeToolInner(editor: EditorCore, name: string, args: Args, co
       );
       editor.execute(command);
       return ok({ splitIds });
-    }
-
-    case "generate_game_html": {
-      const title = str(args, "title", "Generated Game");
-      const html = str(args, "html");
-      const files = fileBundle(args.files);
-      context.onGeneratedGame?.(title, html, files.length > 0 ? files : undefined);
-      return ok({ registered: true, title, hasHtml: Boolean(html.trim()), fileCount: files.length });
-    }
-
-    case "morphus_list_files":
-      return context.morphusListFiles
-        ? ok(context.morphusListFiles())
-        : fail("Morphus file listing is unavailable in this context.");
-
-    case "morphus_read_file": {
-      const path = str(args, "path");
-      const startLine = optionalNum(args, "startLine");
-      const endLine = optionalNum(args, "endLine");
-      const maxChars = optionalNum(args, "maxChars");
-      return context.morphusReadFile
-        ? ok(context.morphusReadFile(path, { endLine, maxChars, startLine }))
-        : fail("Morphus file reading is unavailable in this context.");
-    }
-
-    case "morphus_search_files": {
-      const query = str(args, "query");
-      const maxResults = optionalNum(args, "maxResults");
-      const pathGlob = optionalStr(args, "pathGlob");
-      const useRegex = bool(args, "useRegex");
-      const includeAssets = bool(args, "includeAssets");
-      return context.morphusSearchFiles
-        ? ok(context.morphusSearchFiles(query, { includeAssets, maxResults, pathGlob, useRegex }))
-        : fail("Morphus file search is unavailable in this context.");
-    }
-
-    case "morphus_write_file": {
-      const path = str(args, "path");
-      const content = str(args, "content");
-      return context.morphusWriteFile
-        ? ok(context.morphusWriteFile(path, content))
-        : fail("Morphus file writing is unavailable in this context.");
-    }
-
-    case "morphus_create_file": {
-      const path = str(args, "path");
-      const content = str(args, "content");
-      return context.morphusCreateFile
-        ? ok(context.morphusCreateFile(path, content))
-        : fail("Morphus file creation is unavailable in this context.");
-    }
-
-    case "morphus_request_delete_file": {
-      const path = str(args, "path");
-      const reason = str(args, "reason");
-      return context.morphusRequestDeleteFile
-        ? ok(context.morphusRequestDeleteFile(path, reason))
-        : fail("Morphus delete approval requests are unavailable in this context.");
-    }
-
-    case "morphus_request_rename_file": {
-      const fromPath = str(args, "fromPath");
-      const toPath = str(args, "toPath");
-      const reason = str(args, "reason");
-      return context.morphusRequestRenameFile
-        ? ok(context.morphusRequestRenameFile(fromPath, toPath, reason))
-        : fail("Morphus rename approval requests are unavailable in this context.");
     }
 
     default:

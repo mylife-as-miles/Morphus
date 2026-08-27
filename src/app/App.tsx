@@ -103,7 +103,6 @@ import type { MeshEditMode } from "@/viewport/editing";
 import type { ViewportBlockoutDropKind } from "@/viewport/utils/viewport-blockout-dnd";
 import { useAppHotkeys } from "@/app/hooks/useAppHotkeys";
 import { useCopilot } from "@/app/hooks/useCopilot";
-import type { AiAssistantMode } from "@/lib/copilot/types";
 import { GameConnectionControl } from "@/components/editor-shell/GameConnectionControl";
 import { useEditorSubscriptions } from "@/app/hooks/useEditorSubscriptions";
 import { 
@@ -2027,9 +2026,7 @@ export function App() {
     }) => {
       void handlePushSceneToGame(options).catch(() => {});
     }
-  }, "copilot");
-
-  const morphus = useCopilot(editor, {}, "morphus");
+  });
 
   const handleToggleCopilot = () => {
     uiStore.copilotPanelOpen = !uiStore.copilotPanelOpen;
@@ -2055,17 +2052,7 @@ export function App() {
   };
 
   const handleOpenAiLauncher = () => {
-    uiStore.aiModePickerOpen = true;
-  };
-
-  const handleCloseAiModePicker = () => {
-    uiStore.aiModePickerOpen = false;
-  };
-
-  const handleSelectAiAssistantMode = (mode: AiAssistantMode) => {
-    uiStore.aiAssistantMode = mode;
     uiStore.copilotPanelOpen = true;
-    uiStore.aiModePickerOpen = false;
   };
 
   const handleToggleLogicViewer = () => {
@@ -2188,10 +2175,7 @@ export function App() {
         activeRightPanel={ui.rightPanel}
         activeToolId={toolSession.toolId}
         activeBrushShape={activeBrushShape}
-        aiAssistantMode={ui.aiAssistantMode}
-        aiModePickerOpen={ui.aiModePickerOpen}
         copilot={copilot}
-        morphus={morphus}
         copilotPanelOpen={ui.copilotPanelOpen}
         gameConnectionControl={
           <GameConnectionControl
@@ -2214,9 +2198,7 @@ export function App() {
           />
         }
         logicViewerOpen={ui.logicViewerOpen}
-        onCloseAiModePicker={handleCloseAiModePicker}
         onOpenAiLauncher={handleOpenAiLauncher}
-        onSelectAiAssistantMode={handleSelectAiAssistantMode}
         onToggleCopilot={handleToggleCopilot}
         onPlaceSkateparkElement={handlePlaceSkateparkElement}
         onToggleLogicViewer={handleToggleLogicViewer}
