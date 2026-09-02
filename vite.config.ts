@@ -40,6 +40,11 @@ const workspaceAliases = {
   "@blud/three-runtime": path.resolve(repoRoot, "packages/three-runtime/src/index.ts"),
   "@blud/tool-system": path.resolve(repoRoot, "packages/tool-system/src/index.ts"),
   "@blud/vfx": path.resolve(repoRoot, "packages/vfx/src/index.ts"),
+  "@blud/architecture": path.resolve(repoRoot, "packages/architecture/src/index.ts"),
+  "@blud/runtime-format": path.resolve(repoRoot, "packages/runtime-format/src/index.ts"),
+  "@blud/runtime-scripting": path.resolve(repoRoot, "packages/runtime-scripting/src/index.ts"),
+  "@blud/scene-importer": path.resolve(repoRoot, "packages/scene-importer/src/index.ts"),
+  "@blud/skatepark": path.resolve(repoRoot, "packages/skatepark/src/index.ts"),
   "@blud/workers": path.resolve(repoRoot, "packages/workers/src/index.ts")
 } as const;
 

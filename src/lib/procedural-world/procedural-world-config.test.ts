@@ -11,22 +11,22 @@ import {
   resolveProceduralWorldPreset,
   validateProceduralWorldConfig,
   type ProceduralWorldNode,
-} from "../../../../../packages/shared/src/index";
+} from "../../../packages/shared/src/index";
 import {
   createEditorCore,
   createSceneDocument,
   loadSceneDocumentSnapshot,
   updateProceduralWorldNodeCommand,
-} from "../../../../../packages/editor-core/src/index";
-import { buildRuntimeSceneFromSnapshot } from "../../../../../packages/runtime-build/src/snapshot-build";
-import { WorldSeed } from "../../../../../packages/procedural-world/src/core/Seed";
-import { adaptAtmosphereConfig } from "../../../../../packages/procedural-world/src/integration/config/AtmosphereConfigAdapter";
-import { adaptLightingConfig } from "../../../../../packages/procedural-world/src/integration/config/LightingConfigAdapter";
-import { adaptMotionConfig } from "../../../../../packages/procedural-world/src/integration/config/MotionConfigAdapter";
-import { adaptTerrainConfig } from "../../../../../packages/procedural-world/src/integration/config/TerrainConfigAdapter";
-import { adaptVegetationConfig } from "../../../../../packages/procedural-world/src/integration/config/VegetationConfigAdapter";
-import { adaptWaterConfig } from "../../../../../packages/procedural-world/src/integration/config/WaterConfigAdapter";
-import { ProceduralWorldConfigBinder } from "../../../../../packages/procedural-world/src/integration/config/ProceduralWorldConfigBinder";
+} from "../../../packages/editor-core/src/index";
+import { buildRuntimeSceneFromSnapshot } from "../../../packages/runtime-build/src/snapshot-build";
+import { WorldSeed } from "../../../packages/procedural-world/src/core/Seed";
+import { adaptAtmosphereConfig } from "../../../packages/procedural-world/src/integration/config/AtmosphereConfigAdapter";
+import { adaptLightingConfig } from "../../../packages/procedural-world/src/integration/config/LightingConfigAdapter";
+import { adaptMotionConfig } from "../../../packages/procedural-world/src/integration/config/MotionConfigAdapter";
+import { adaptTerrainConfig } from "../../../packages/procedural-world/src/integration/config/TerrainConfigAdapter";
+import { adaptVegetationConfig } from "../../../packages/procedural-world/src/integration/config/VegetationConfigAdapter";
+import { adaptWaterConfig } from "../../../packages/procedural-world/src/integration/config/WaterConfigAdapter";
+import { ProceduralWorldConfigBinder } from "../../../packages/procedural-world/src/integration/config/ProceduralWorldConfigBinder";
 
 test("migrates version 1 procedural config and removes the legacy schema field", () => {
   const legacy = { ...createDefaultProceduralWorldConfig(41729), version: undefined, schemaVersion: 1 };
