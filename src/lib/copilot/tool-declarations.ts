@@ -555,37 +555,6 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
     }
   },
   {
-    name: "generate_game_html",
-    description:
-      "Call this after you have written the complete standalone HTML game in a ```html code block in your message. This tool registers the game artifact so it appears as a playable card in the UI. Do NOT put the HTML in the tool arguments — write it in your message text first, then call this tool with only the title. Default to a premium, polished UI/HUD/layout for game, HTML, browser-based, and viewport-facing experiences unless the user explicitly wants a minimal or debug look.",
-    parameters: {
-      type: "object",
-      properties: {
-        title: {
-          type: "string",
-          description: "A short, descriptive title for the game shown in the UI (e.g. 'Terrain Vehicle Demo')"
-        },
-        html: {
-          type: "string",
-          description: "Optional complete standalone index.html for provider fallback mode."
-        },
-        files: {
-          type: "array",
-          description: "Optional multi-file project bundle for provider fallback mode. Prefer this over html when possible.",
-          items: {
-            type: "object",
-            properties: {
-              path: { type: "string", description: "Project-relative path such as index.html, main.js, scene.js, or style.css" },
-              content: { type: "string", description: "Complete file contents" }
-            },
-            required: ["path", "content"]
-          }
-        }
-      },
-      required: ["title"]
-    }
-  },
-  {
     name: "capture_viewport_screenshot",
     description:
       "Capture a screenshot of the active editor viewport so you can inspect what has actually been built. Use this after meaningful scene changes when visual confirmation would help.",
@@ -597,99 +566,6 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
           description: "Optional short note about what you want to inspect in the screenshot"
         }
       }
-    }
-  },
-  {
-    name: "morphus_list_files",
-    description:
-      "List files in the current Morphus HTML game workspace. Use this before follow-up edits so you can inspect the existing project instead of regenerating it.",
-    parameters: {
-      type: "object",
-      properties: {}
-    }
-  },
-  {
-    name: "morphus_read_file",
-    description:
-      "Read a bounded slice of one existing text file from the current Morphus workspace. Use only for files you truly need to edit, and do not reread the same file in one run.",
-    parameters: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Project-relative file path, for example index.html, style.css, or main.js" },
-        startLine: { type: "number", description: "Optional 1-based first line to read when you only need a slice." },
-        endLine: { type: "number", description: "Optional 1-based last line to read when you only need a slice." },
-        maxChars: { type: "number", description: "Optional character cap for the returned content. Defaults to a small safe cap." }
-      },
-      required: ["path"]
-    }
-  },
-  {
-    name: "morphus_search_files",
-    description:
-      "Search Morphus workspace file paths and text content before reading files. Use this for bug fixes and follow-up edits to find relevant files cheaply, then read only the returned line ranges you need.",
-    parameters: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "Plain text or regex query, for example Audio, morphusAudio, play\\(, goal.mp3, or audio|Audio|play\\(" },
-        useRegex: { type: "boolean", description: "Treat query as a JavaScript regular expression. Defaults to false." },
-        pathGlob: { type: "string", description: "Optional path substring filter such as .js, audio, index.html, or assets/audio." },
-        maxResults: { type: "number", description: "Maximum matches to return. Defaults to 12 and is capped." },
-        includeAssets: { type: "boolean", description: "Whether to include binary/asset files in path-only search results. Defaults to false." }
-      },
-      required: ["query"]
-    }
-  },
-  {
-    name: "morphus_write_file",
-    description:
-      "Replace the full contents of an existing Morphus workspace file. Use only after reading or otherwise knowing the current file contents.",
-    parameters: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Existing project-relative file path to update" },
-        content: { type: "string", description: "Complete replacement file contents" }
-      },
-      required: ["path", "content"]
-    }
-  },
-  {
-    name: "morphus_create_file",
-    description:
-      "Create a new file in the current Morphus workspace. Prefer editing existing files for continue/follow-up requests; create a file only when a new module or asset manifest is genuinely needed.",
-    parameters: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "New project-relative file path" },
-        content: { type: "string", description: "Complete file contents" }
-      },
-      required: ["path", "content"]
-    }
-  },
-  {
-    name: "morphus_request_delete_file",
-    description:
-      "Request user approval to delete a Morphus workspace file. This tool does not delete anything; it records the requested path and reason so the assistant can ask the user before removal.",
-    parameters: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Project-relative file path proposed for deletion" },
-        reason: { type: "string", description: "Why deleting this file is necessary" }
-      },
-      required: ["path", "reason"]
-    }
-  },
-  {
-    name: "morphus_request_rename_file",
-    description:
-      "Request user approval to rename or move a Morphus workspace file. This tool does not rename anything; it records the requested source, destination, and reason.",
-    parameters: {
-      type: "object",
-      properties: {
-        fromPath: { type: "string", description: "Existing project-relative file path" },
-        toPath: { type: "string", description: "Requested new project-relative file path" },
-        reason: { type: "string", description: "Why this rename or move is necessary" }
-      },
-      required: ["fromPath", "toPath", "reason"]
     }
   },
   {
@@ -2229,21 +2105,12 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
   }
 ];
 
-/** Viewport-editor Copilot tools only. Standalone HTML generation belongs to Morphus. */
-export const EDITOR_COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] =
-  COPILOT_TOOL_DECLARATIONS.filter((tool) => !tool.name.startsWith("morphus_") && tool.name !== "generate_game_html");
-
-/** Only `generate_game_html` — used when the model's task is a standalone game or browser-based interactive experience */
-export const GAME_TOOL_DECLARATIONS: CopilotToolDeclaration[] =
-  COPILOT_TOOL_DECLARATIONS.filter((tool) =>
-    tool.name === "generate_game_html" || tool.name.startsWith("morphus_")
-  );
+/** Viewport-editor Copilot tools. */
+export const EDITOR_COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = COPILOT_TOOL_DECLARATIONS;
 
 /**
  * Return `true` when the user's prompt is clearly a standalone-game or browser-based
- * interactive request (not a scene-editing request). In that case we expose only
- * `generate_game_html`
- * instead of the full editor tool catalog so the model context stays lean.
+ * interactive request (not a scene-editing request).
  */
 export function isGameGenerationPrompt(prompt: string): boolean {
   const lower = prompt.toLowerCase();
