@@ -317,6 +317,11 @@ function resolveRegion(
   // With nothing authored yet the only sensible view is a tile of default size
   // at the world origin. Once strokes exist the region has to reach them, or
   // the user's own work is the part that is not on screen.
+  //
+  // The tile is grid-aligned so CSG ownership stays consistent, and the grid is
+  // anchored at zero -- so the origin is always a tile *corner*, never a centre.
+  // A fresh terrain therefore occupies one quadrant from the origin outward,
+  // and it is the caller's job to frame it (see `createMeshTerrainNode`).
   const authored = authoredBounds(ordered)
   let size = Math.min(worldSize, DEFAULT_REGION_SIZE)
   if (!authored) return alignRegion(0, 0, size, warnings)

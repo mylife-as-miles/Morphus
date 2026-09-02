@@ -63,6 +63,7 @@ import {
   isModelNode,
   isPrimitiveNode,
   isMeshTerrainNode,
+  type TerrainNode,
   isProceduralWorldNode,
   createDefaultProceduralWorldNodeData,
   makeTransform,
@@ -157,6 +158,23 @@ function loadModelAssetTools() {
   }
 
   return modelAssetToolsPromise;
+}
+
+/** Matches DEFAULT_REGION_SIZE in @blud/terrain's evaluator. */
+const DEFAULT_TERRAIN_REGION_SIZE = 512;
+
+/**
+ * Middle of the ground a fresh mesh terrain actually covers.
+ *
+ * Mirrors `resolveRegion`'s empty-stack case: one default-sized tile from the
+ * node position outward. Height is left at the node's own Y -- the camera only
+ * needs to be pointed at the right patch of ground, not at the exact surface.
+ */
+function terrainRegionCentre(node: TerrainNode): Vec3 {
+  const world = node.data.meshTerrain?.worldSize ?? 0;
+  const tile = Math.min(world > 0 ? world : DEFAULT_TERRAIN_REGION_SIZE, DEFAULT_TERRAIN_REGION_SIZE);
+  const half = tile / 2;
+  return vec3(node.transform.position.x + half, node.transform.position.y, node.transform.position.z + half);
 }
 
 export function App() {
@@ -2042,6 +2060,18 @@ export function App() {
     editor.execute(createTerrainNodeCommand(node));
     editor.select([node.id], "object");
     setActiveToolId("terrain-sculpt");
+
+    // Frame the surface, not the node.
+    //
+    // The evaluated region is a grid-aligned tile and the grid is anchored at
+    // zero, so a fresh terrain runs from its node position outward into one
+    // quadrant rather than sitting centred under it. Left alone the camera
+    // stares at the tile's corner with most of the view empty, which reads as
+    // the terrain having failed to render.
+    const surface = terrainRegionCentre(node);
+    viewportPaneIds.forEach((viewportId) => {
+      focusViewportOnPoint(uiStore.viewports[viewportId], surface);
+    });
   };
 
   const handleCreateProceduralWorld = () => {
