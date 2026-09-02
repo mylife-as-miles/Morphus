@@ -79,6 +79,7 @@ import { NodeTransformGroup } from "@/viewport/components/NodeTransformGroup";
 import { ObjectTransformGizmo } from "@/viewport/components/ObjectTransformGizmo";
 import { PreviewNpcDialogueOverlay } from "@/viewport/components/PreviewNpcDialogueOverlay";
 import { ScenePreview } from "@/viewport/components/ScenePreview";
+import { MeshTerrainLabLayer } from "@/viewport/components/MeshTerrainLabLayer";
 import { MeshTerrainObject } from "@/viewport/components/MeshTerrainObject";
 import { ForestLayer } from "@/viewport/components/ForestLayer";
 import { VfxLayer } from "@/viewport/components/VfxLayer";
@@ -3742,6 +3743,10 @@ export function ViewportCanvas({
         ) : null}
         <ForestLayer bakes={forestBakes} visible={!forest.interacting} />
         <VfxLayer enabled={isActiveViewport} />
+        {/* Upstream's renderer, under our chrome. It draws only on WebGPU, so
+            the geometry-only fallback below stays mounted for the WebGL path --
+            the two never draw at once. */}
+        <MeshTerrainLabLayer enabled={Boolean(meshTerrainNode)} />
         <MeshTerrainObject
           hovered={false}
           interactive={editorInteractionEnabled}

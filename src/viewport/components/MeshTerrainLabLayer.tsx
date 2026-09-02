@@ -1,0 +1,112 @@
+/**
+ * The vendored Mesh Terrain Lab's scene, drawn inside Dream Studio's viewport.
+ *
+ * This is the whole point of route 2: keep Dream Studio's chrome -- its menubar,
+ * tools panel, inspector, gizmos -- and put upstream's renderer under it, rather
+ * than running upstream's editor beside ours at `?editor=terrain`.
+ *
+ * `TerrainScene` is mounted verbatim. It brings its own environment, post stack
+ * and streaming scheduler, which is exactly what makes it look the way it does;
+ * trying to reassemble those from Dream Studio's pipeline is how the earlier
+ * geometry-only port ended up drawing a flat green mass.
+ *
+ * Two consequences worth knowing:
+ *
+ *  - It only draws on WebGPU. Every material in it is a TSL node graph and
+ *    upstream ships no WebGL path, so on the WebGL backend this renders
+ *    nothing rather than falling back.
+ *  - It owns tone mapping and the environment for the frame it is in, so
+ *    Dream Studio's own sky and lighting are not additive with it.
+ */
+
+import { Suspense, useEffect, useMemo, useSyncExternalStore } from "react";
+import { getRendererAdapter } from "@blud/renderer-backend";
+import { TerrainScene } from "@/super-terrain/terrain/react/TerrainScene";
+import {
+  meshTerrainGeneration,
+  meshTerrainWorld,
+  subscribeMeshTerrain,
+  terrainEditorStore,
+  terrainFoliageStore,
+  terrainForestStore,
+  terrainTreeStore
+} from "@/state/mesh-terrain-lab";
+
+export type MeshTerrainLabLayerProps = {
+  /** False leaves the scene unmounted, so nothing streams or compiles. */
+  enabled?: boolean;
+};
+
+export function MeshTerrainLabLayer({ enabled = true }: MeshTerrainLabLayerProps) {
+  // Remounted on a world rebuild: seed and landform are fixed at construction,
+  // so a new world is a new scene rather than a mutated one.
+  const generation = useSyncExternalStore(
+    subscribeMeshTerrain,
+    meshTerrainGeneration,
+    meshTerrainGeneration
+  );
+
+  // The terrain materials are WGSL node graphs with no WebGL fallback. Mounting
+  // them on a WebGL canvas produces a wall of shader-compilation failures and
+  // still draws nothing, so the check is a guard rather than a preference.
+  //
+  // Asked of the renderer *backend* rather than of three's renderer object: the
+  // adapter hands R3F a WebGPURenderer cast to WebGLRenderer, so duck-typing the
+  // instance is unreliable, and getting it wrong silently unmounts the terrain.
+  const isWebGpu = useMemo(() => {
+    try {
+      return getRendererAdapter().backend === "webgpu";
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // Upstream drives this from its own App: the runtime does not stream until it
+  // is initialized, and `TerrainScene` only attaches a renderer to a world that
+  // is already running. Without it the environment draws and the ground never
+  // does -- every section counter sits at zero.
+  useEffect(() => {
+    if (!enabled || !isWebGpu) return;
+
+    let active = true;
+    const world = meshTerrainWorld();
+
+    void world.initialize({ discardSavedWorld: false }).then(() => {
+      if (!active) return;
+      terrainEditorStore.patch({
+        activeSculptLayerId: world.getSculptLayers()[0]?.id,
+        status: "Stream scheduler online"
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+    // Keyed on the generation so a rebuilt world is initialized in its turn.
+  }, [enabled, generation, isWebGpu]);
+
+  if (import.meta.env.DEV) {
+    (globalThis as Record<string, unknown>).__meshTerrainLab = {
+      world: meshTerrainWorld(),
+      editor: terrainEditorStore,
+      forest: terrainForestStore,
+      enabled,
+      isWebGpu
+    };
+  }
+
+  if (!enabled || !isWebGpu) return null;
+
+  return (
+    <Suspense fallback={null}>
+      <TerrainScene
+        editor={terrainEditorStore}
+        foliage={terrainFoliageStore}
+        forest={terrainForestStore}
+        key={generation}
+        terrain={meshTerrainWorld()}
+        trees={terrainTreeStore}
+      />
+    </Suspense>
+  );
+}

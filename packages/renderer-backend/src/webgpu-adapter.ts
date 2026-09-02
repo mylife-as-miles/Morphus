@@ -91,9 +91,15 @@ export class WebGPURendererAdapter implements RendererAdapter {
       if (!canvas) {
         throw new Error("[WebGPURendererAdapter] No canvas element in R3F gl props.");
       }
-      const renderer = createWebGPURenderer(canvas);
-      await (renderer as unknown as { init?: () => Promise<void> }).init?.();
-      return renderer;
+      // R3F v9 can re-enter an async gl factory before the first call settles.
+      // Handing back the in-flight renderer keeps two WebGPU contexts from
+      // racing to own the same canvas.
+      let pending = inFlightRenderers.get(canvas);
+      if (!pending) {
+        pending = createWebGPURenderer(canvas);
+        inFlightRenderers.set(canvas, pending);
+      }
+      return pending;
     };
   }
 
@@ -155,18 +161,98 @@ export class WebGPURendererAdapter implements RendererAdapter {
  * When Three.js promotes WebGPURenderer to stable, the dynamic import can be
  * replaced with a static one.
  */
-function createWebGPURenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
+/**
+ * Limits raised past the guaranteed floor, clamped to what this adapter has.
+ *
+ * WebGPU guarantees only sixteen sampled textures per shader stage, and the
+ * mesh-terrain material sits close to it: it samples its own surface, detail,
+ * relief and paint maps, and then the painted forest floor on top. Crossing the
+ * line does not degrade gracefully -- the render pipeline fails to create, the
+ * material draws nothing, and the only evidence is a validation message in the
+ * console.
+ *
+ * Requested through `min` against the adapter's own report rather than asked
+ * for outright, because `requestDevice` *fails* when a required limit cannot be
+ * met. Asking a weak adapter for more than it has would turn a material that
+ * renders slightly wrong into an editor that does not start.
+ */
+async function headroomLimits(): Promise<Record<string, number>> {
+  if (typeof navigator === "undefined" || !navigator.gpu) return {};
+
+  const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
+  if (!adapter) return {};
+
+  const wanted: Record<string, number> = {
+    maxSampledTexturesPerShaderStage: 32,
+    // The foliage mask writes one storage texture per weight row, plus the
+    // surfaces and the sward summary. The guaranteed floor for those is four.
+    maxStorageTexturesPerShaderStage: 8
+  };
+
+  const available = adapter.limits as unknown as Record<string, number>;
+  const limits: Record<string, number> = {};
+  for (const [name, value] of Object.entries(wanted)) {
+    const supported = available[name];
+    if (typeof supported === "number") limits[name] = Math.min(value, supported);
+  }
+  return limits;
+}
+
+function sizeRendererToCanvas(
+  renderer: { setPixelRatio: (dpr: number) => void; setSize: (w: number, h: number, updateStyle: boolean) => void },
+  canvas: HTMLCanvasElement,
+  dpr: number
+): void {
+  const bounds = canvas.getBoundingClientRect();
+  renderer.setPixelRatio(dpr);
+  renderer.setSize(
+    Math.max(1, Math.round(bounds.width)),
+    Math.max(1, Math.round(bounds.height)),
+    false
+  );
+}
+
+async function createWebGPURenderer(canvas: HTMLCanvasElement): Promise<THREE.WebGLRenderer> {
   const THREE_WEBGPU = getThreeWebGPU();
   if (!THREE_WEBGPU) {
     throw new Error(
       "[WebGPURendererAdapter] THREE.WebGPURenderer is not available in this build."
     );
   }
-  const renderer = new THREE_WEBGPU.WebGPURenderer({ canvas, antialias: true });
-  return renderer as unknown as THREE.WebGLRenderer;
+
+  const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+
+  const renderer = new THREE_WEBGPU.WebGPURenderer({
+    canvas,
+    requiredLimits: await headroomLimits(),
+    antialias: true,
+    // Stated explicitly: alpha-to-coverage only smooths anything when there are
+    // samples to dither across. Foliage cutouts fall back to hard binary edges
+    // the moment the sample count drops to one.
+    samples: 4,
+    alpha: false,
+    powerPreference: "high-performance"
+  }) as unknown as THREE.WebGLRenderer & { init?: () => Promise<void> };
+
+  renderer.toneMapping = THREE_WEBGPU.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.03;
+
+  // Sized before init so the first pass allocates attachments at the real size,
+  // and again after, because CSS layout can settle while requestDevice is
+  // pending.
+  sizeRendererToCanvas(renderer, canvas, dpr);
+  await renderer.init?.();
+  sizeRendererToCanvas(renderer, canvas, dpr);
+
+  return renderer;
 }
 
-type ThreeWebGPUModule = { WebGPURenderer: new (opts: unknown) => unknown };
+const inFlightRenderers = new WeakMap<HTMLCanvasElement, Promise<THREE.WebGLRenderer>>();
+
+type ThreeWebGPUModule = {
+  WebGPURenderer: new (opts: unknown) => unknown;
+  ACESFilmicToneMapping: THREE.ToneMapping;
+};
 
 let _cachedWebGPUModule: ThreeWebGPUModule | null | undefined = undefined;
 let _loadingWebGPUModule: Promise<ThreeWebGPUModule | null> | null = null;
