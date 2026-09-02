@@ -1,9 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": "../..",
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["apps/editor/src/*"],
+      "@/*": ["src/*"],
       "@blud/anim-compiler": ["packages/anim-compiler/src/index.ts"],
       "@blud/anim-core": ["packages/anim-core/src/index.ts"],
       "@blud/anim-editor-core": ["packages/anim-editor-core/src/index.ts"],
@@ -17,6 +17,7 @@
       "@blud/dev-sync": ["packages/dev-sync/src/index.ts"],
       "@blud/dev-sync/node": ["packages/dev-sync/src/node.ts"],
       "@blud/editor-core": ["packages/editor-core/src/index.ts"],
+      "@blud/forest": ["packages/forest/src/index.ts"],
       "@blud/engine-config": ["packages/engine-config/src/index.ts"],
       "@blud/geometry-kernel": ["packages/geometry-kernel/src/index.ts"],
       "@blud/gameplay-runtime": ["packages/gameplay-runtime/src/index.ts"],
@@ -33,8 +34,11 @@
       "@blud/scene-importer": ["packages/scene-importer/src/index.ts"],
       "@blud/shared": ["packages/shared/src/index.ts"],
       "@blud/skatepark": ["packages/skatepark/src/index.ts"],
+      "@blud/terrain": ["packages/terrain/src/index.ts"],
+      "@blud/terrain/authoring": ["packages/terrain/src/authoring.ts"],
       "@blud/three-runtime": ["packages/three-runtime/src/index.ts"],
       "@blud/tool-system": ["packages/tool-system/src/index.ts"],
+      "@blud/vfx": ["packages/vfx/src/index.ts"],
       "@blud/workers": ["packages/workers/src/index.ts"]
     },
     "types": ["vite/client", "node"]

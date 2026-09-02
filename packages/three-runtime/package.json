@@ -1,0 +1,46 @@
+{
+  "name": "@blud/three-runtime",
+  "version": "0.1.11",
+  "description": "Three.js runtime loader and object factory for Web Hammer content.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup --config ../../scripts/tsup.package.config.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vibe-stack/blob.git",
+    "directory": "packages/three-runtime"
+  },
+  "bugs": {
+    "url": "https://github.com/vibe-stack/blob/issues"
+  },
+  "homepage": "https://github.com/vibe-stack/blob/tree/main/packages/three-runtime",
+  "devDependencies": {
+    "@types/three": "^0.184.1"
+  },
+  "dependencies": {
+    "@blud/runtime-build": "*",
+    "@blud/runtime-format": "*",
+    "@blud/shared": "*",
+    "earcut": "^3.0.2",
+    "three": "0.184.0"
+  }
+}

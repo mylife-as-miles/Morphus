@@ -18,7 +18,6 @@ type ToolPaletteProps = {
   aiModelPlacementActive: boolean;
   activeToolId: ToolId;
   currentSnapSize: GridSnapValue;
-  gridInfinite: boolean;
   gridSnapValues: readonly GridSnapValue[];
   meshEditMode: MeshEditMode;
   onMeshEditToolbarAction: (action: MeshEditToolbarActionRequest["kind"]) => void;
@@ -45,7 +44,6 @@ type ToolPaletteProps = {
   onStartAiModelPlacement: () => void;
   onSelectBrushShape: (shape: BrushShape) => void;
   onSetMeshEditMode: (mode: MeshEditMode) => void;
-  onSetGridInfinite: (infinite: boolean) => void;
   onSetSnapEnabled: (enabled: boolean) => void;
   onSetSnapSize: (snapSize: GridSnapValue) => void;
   onStopPhysics: () => void;
@@ -70,7 +68,6 @@ export function ToolPalette({
   aiModelPlacementActive,
   activeToolId,
   currentSnapSize,
-  gridInfinite,
   gridSnapValues,
   meshEditMode,
   onMeshEditToolbarAction,
@@ -94,7 +91,6 @@ export function ToolPalette({
   onStartAiModelPlacement,
   onSelectBrushShape,
   onSetMeshEditMode,
-  onSetGridInfinite,
   onSetSnapEnabled,
   onSetSnapSize,
   onStopPhysics,
@@ -217,7 +213,6 @@ export function ToolPalette({
 
 export function ViewportToolbarControls({
   currentSnapSize,
-  gridInfinite,
   gridSnapValues,
   onPausePhysics,
   onPlaceFloorPreset,
@@ -225,7 +220,6 @@ export function ViewportToolbarControls({
   onResumePhysics,
   onSimulatePhysics,
   onStepPhysics,
-  onSetGridInfinite,
   onSetSnapEnabled,
   onSetSnapSize,
   onSetViewMode,
@@ -239,7 +233,6 @@ export function ViewportToolbarControls({
 }: Pick<
   ToolPaletteProps,
   | "currentSnapSize"
-  | "gridInfinite"
   | "gridSnapValues"
   | "onPausePhysics"
   | "onPlaceFloorPreset"
@@ -247,7 +240,6 @@ export function ViewportToolbarControls({
   | "onResumePhysics"
   | "onSimulatePhysics"
   | "onStepPhysics"
-  | "onSetGridInfinite"
   | "onSetSnapEnabled"
   | "onSetSnapSize"
   | "onSetViewMode"
@@ -264,9 +256,7 @@ export function ViewportToolbarControls({
       <ViewModeControl currentViewMode={viewMode} onSetViewMode={onSetViewMode} />
       <SnapControl
         currentSnapSize={currentSnapSize}
-        gridInfinite={gridInfinite}
         gridSnapValues={gridSnapValues}
-        onSetGridInfinite={onSetGridInfinite}
         onSetSnapEnabled={onSetSnapEnabled}
         onSetSnapSize={onSetSnapSize}
         snapEnabled={snapEnabled}

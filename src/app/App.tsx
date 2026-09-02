@@ -4,7 +4,9 @@ import {
   analyzeSceneSpatialLayout,
   axisDelta,
   createAssignMaterialCommand,
+  createMeshTerrainNode,
   createProceduralWorldNodeCommand,
+  createTerrainNodeCommand,
   createDeleteMaterialCommand,
   createUpsertAssetCommand,
   createDeleteTextureCommand,
@@ -60,6 +62,7 @@ import {
   isMeshNode,
   isModelNode,
   isPrimitiveNode,
+  isMeshTerrainNode,
   isProceduralWorldNode,
   createDefaultProceduralWorldNodeData,
   makeTransform,
@@ -103,6 +106,7 @@ import type { MeshEditMode } from "@/viewport/editing";
 import type { ViewportBlockoutDropKind } from "@/viewport/utils/viewport-blockout-dnd";
 import { useAppHotkeys } from "@/app/hooks/useAppHotkeys";
 import { useCopilot } from "@/app/hooks/useCopilot";
+import type { AiAssistantMode } from "@/lib/copilot/types";
 import { GameConnectionControl } from "@/components/editor-shell/GameConnectionControl";
 import { useEditorSubscriptions } from "@/app/hooks/useEditorSubscriptions";
 import { 
@@ -483,12 +487,6 @@ export function App() {
   const handleSetSnapEnabled = (enabled: boolean) => {
     viewportPaneIds.forEach((viewportId) => {
       uiStore.viewports[viewportId].grid.enabled = enabled;
-    });
-  };
-
-  const handleSetGridInfinite = (infinite: boolean) => {
-    viewportPaneIds.forEach((viewportId) => {
-      uiStore.viewports[viewportId].grid.infinite = infinite;
     });
   };
 
@@ -2026,10 +2024,27 @@ export function App() {
     }) => {
       void handlePushSceneToGame(options).catch(() => {});
     }
-  });
+  }, "copilot");
+
+  const morphus = useCopilot(editor, {}, "morphus");
 
   const handleToggleCopilot = () => {
     uiStore.copilotPanelOpen = !uiStore.copilotPanelOpen;
+  };
+
+  const handleCreateMeshTerrain = () => {
+    const existing = Array.from(editor.scene.nodes.values()).find(isMeshTerrainNode);
+
+    if (existing) {
+      editor.select([existing.id], "object");
+      uiStore.rightPanel = "inspector";
+      return;
+    }
+
+    const node = createMeshTerrainNode({ name: "Mesh Terrain" });
+    editor.execute(createTerrainNodeCommand(node));
+    editor.select([node.id], "object");
+    setActiveToolId("terrain-sculpt");
   };
 
   const handleCreateProceduralWorld = () => {
@@ -2052,7 +2067,17 @@ export function App() {
   };
 
   const handleOpenAiLauncher = () => {
+    uiStore.aiModePickerOpen = true;
+  };
+
+  const handleCloseAiModePicker = () => {
+    uiStore.aiModePickerOpen = false;
+  };
+
+  const handleSelectAiAssistantMode = (mode: AiAssistantMode) => {
+    uiStore.aiAssistantMode = mode;
     uiStore.copilotPanelOpen = true;
+    uiStore.aiModePickerOpen = false;
   };
 
   const handleToggleLogicViewer = () => {
@@ -2175,7 +2200,10 @@ export function App() {
         activeRightPanel={ui.rightPanel}
         activeToolId={toolSession.toolId}
         activeBrushShape={activeBrushShape}
+        aiAssistantMode={ui.aiAssistantMode}
+        aiModePickerOpen={ui.aiModePickerOpen}
         copilot={copilot}
+        morphus={morphus}
         copilotPanelOpen={ui.copilotPanelOpen}
         gameConnectionControl={
           <GameConnectionControl
@@ -2198,7 +2226,9 @@ export function App() {
           />
         }
         logicViewerOpen={ui.logicViewerOpen}
+        onCloseAiModePicker={handleCloseAiModePicker}
         onOpenAiLauncher={handleOpenAiLauncher}
+        onSelectAiAssistantMode={handleSelectAiAssistantMode}
         onToggleCopilot={handleToggleCopilot}
         onPlaceSkateparkElement={handlePlaceSkateparkElement}
         onToggleLogicViewer={handleToggleLogicViewer}
@@ -2225,6 +2255,7 @@ export function App() {
         onApplyMaterial={handleApplyMaterial}
         onClipSelection={handleClipSelection}
         onCreateBrush={handleCreateBrush}
+        onCreateMeshTerrain={handleCreateMeshTerrain}
         onCreateProceduralWorld={handleCreateProceduralWorld}
         onDeleteSelection={handleDeleteSelection}
         onDuplicateSelection={handleDuplicateSelection}
@@ -2288,7 +2319,6 @@ export function App() {
         onSetSculptBrushStrength={setSculptBrushStrength}
         onSetRightPanel={handleSetRightPanel}
         onSetActiveBrushShape={setActiveBrushShape}
-        onSetGridInfinite={handleSetGridInfinite}
         onSetSnapEnabled={handleSetSnapEnabled}
         onSetSnapSize={handleSetSnapSize}
         onStopPhysics={handleStopPhysics}

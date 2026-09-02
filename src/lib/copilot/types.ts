@@ -5,6 +5,7 @@ export type GeminiModelId = "gemma-4-31b-it";
 
 export type CodexModelId = "gpt-5.4" | "gpt-5.3-codex" | "gpt-5.1-codex-max" | "gpt-4.1" | "gpt-4.1-mini" | "codex-mini-latest" | "o3" | "o4-mini";
 export type CopilotModelId = GeminiModelId | CodexModelId;
+export type AiAssistantMode = "copilot" | "morphus";
 
 // ── Settings ──────────────────────────────────────────────────
 

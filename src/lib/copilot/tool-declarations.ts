@@ -555,6 +555,37 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
     }
   },
   {
+    name: "generate_game_html",
+    description:
+      "Call this after you have written the complete standalone HTML game in a ```html code block in your message. This tool registers the game artifact so it appears as a playable card in the UI. Do NOT put the HTML in the tool arguments — write it in your message text first, then call this tool with only the title. Default to a premium, polished UI/HUD/layout for game, HTML, browser-based, and viewport-facing experiences unless the user explicitly wants a minimal or debug look.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "A short, descriptive title for the game shown in the UI (e.g. 'Terrain Vehicle Demo')"
+        },
+        html: {
+          type: "string",
+          description: "Optional complete standalone index.html for provider fallback mode."
+        },
+        files: {
+          type: "array",
+          description: "Optional multi-file project bundle for provider fallback mode. Prefer this over html when possible.",
+          items: {
+            type: "object",
+            properties: {
+              path: { type: "string", description: "Project-relative path such as index.html, main.js, scene.js, or style.css" },
+              content: { type: "string", description: "Complete file contents" }
+            },
+            required: ["path", "content"]
+          }
+        }
+      },
+      required: ["title"]
+    }
+  },
+  {
     name: "capture_viewport_screenshot",
     description:
       "Capture a screenshot of the active editor viewport so you can inspect what has actually been built. Use this after meaningful scene changes when visual confirmation would help.",
@@ -566,6 +597,99 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
           description: "Optional short note about what you want to inspect in the screenshot"
         }
       }
+    }
+  },
+  {
+    name: "morphus_list_files",
+    description:
+      "List files in the current Morphus HTML game workspace. Use this before follow-up edits so you can inspect the existing project instead of regenerating it.",
+    parameters: {
+      type: "object",
+      properties: {}
+    }
+  },
+  {
+    name: "morphus_read_file",
+    description:
+      "Read a bounded slice of one existing text file from the current Morphus workspace. Use only for files you truly need to edit, and do not reread the same file in one run.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Project-relative file path, for example index.html, style.css, or main.js" },
+        startLine: { type: "number", description: "Optional 1-based first line to read when you only need a slice." },
+        endLine: { type: "number", description: "Optional 1-based last line to read when you only need a slice." },
+        maxChars: { type: "number", description: "Optional character cap for the returned content. Defaults to a small safe cap." }
+      },
+      required: ["path"]
+    }
+  },
+  {
+    name: "morphus_search_files",
+    description:
+      "Search Morphus workspace file paths and text content before reading files. Use this for bug fixes and follow-up edits to find relevant files cheaply, then read only the returned line ranges you need.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Plain text or regex query, for example Audio, morphusAudio, play\\(, goal.mp3, or audio|Audio|play\\(" },
+        useRegex: { type: "boolean", description: "Treat query as a JavaScript regular expression. Defaults to false." },
+        pathGlob: { type: "string", description: "Optional path substring filter such as .js, audio, index.html, or assets/audio." },
+        maxResults: { type: "number", description: "Maximum matches to return. Defaults to 12 and is capped." },
+        includeAssets: { type: "boolean", description: "Whether to include binary/asset files in path-only search results. Defaults to false." }
+      },
+      required: ["query"]
+    }
+  },
+  {
+    name: "morphus_write_file",
+    description:
+      "Replace the full contents of an existing Morphus workspace file. Use only after reading or otherwise knowing the current file contents.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Existing project-relative file path to update" },
+        content: { type: "string", description: "Complete replacement file contents" }
+      },
+      required: ["path", "content"]
+    }
+  },
+  {
+    name: "morphus_create_file",
+    description:
+      "Create a new file in the current Morphus workspace. Prefer editing existing files for continue/follow-up requests; create a file only when a new module or asset manifest is genuinely needed.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "New project-relative file path" },
+        content: { type: "string", description: "Complete file contents" }
+      },
+      required: ["path", "content"]
+    }
+  },
+  {
+    name: "morphus_request_delete_file",
+    description:
+      "Request user approval to delete a Morphus workspace file. This tool does not delete anything; it records the requested path and reason so the assistant can ask the user before removal.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Project-relative file path proposed for deletion" },
+        reason: { type: "string", description: "Why deleting this file is necessary" }
+      },
+      required: ["path", "reason"]
+    }
+  },
+  {
+    name: "morphus_request_rename_file",
+    description:
+      "Request user approval to rename or move a Morphus workspace file. This tool does not rename anything; it records the requested source, destination, and reason.",
+    parameters: {
+      type: "object",
+      properties: {
+        fromPath: { type: "string", description: "Existing project-relative file path" },
+        toPath: { type: "string", description: "Requested new project-relative file path" },
+        reason: { type: "string", description: "Why this rename or move is necessary" }
+      },
+      required: ["fromPath", "toPath", "reason"]
     }
   },
   {
@@ -1709,15 +1833,417 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
       },
       required: ["nodeId", "axis", "coordinate"]
     }
+  },
+
+  // ── Mesh terrain ────────────────────────────────────────────
+  {
+    name: "create_mesh_terrain",
+    description:
+      "Creates a mesh terrain node: a sculptable surface mesh, not a heightfield grid. Because strokes displace along the picked surface normal and holes are cut by exact CSG, mesh terrain can carry overhangs, undercut cliffs, arches, caves, and tunnels that heightmap terrain cannot represent. Terrain is authored in world meters at kilometre scale, so a default terrain is a 4 km square. Returns the node ID that every other terrain_* tool takes as nodeId.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Display name for the terrain node" },
+        x: { type: "number", description: "World X of the terrain center in meters (default 0)" },
+        y: { type: "number", description: "World Y of the terrain base plane in meters (default 0 = ground level)" },
+        z: { type: "number", description: "World Z of the terrain center in meters (default 0)" },
+        worldSizeMeters: { type: "number", description: "Edge length of the square terrain in meters. Default 4096, i.e. a 4 km world. Clamped to 256-16384." },
+        sectionSizeMeters: { type: "number", description: "Edge length of one streamed terrain section in meters. Default 128. Smaller sections rebuild faster after an edit but cost more draw calls. Clamped to 16-1024." },
+        seed: { type: "number", description: "Deterministic base-field seed. The same seed and profile always produce the same starting surface, before any stroke." },
+        profile: {
+          type: "string",
+          enum: ["natural", "flat"],
+          description: "Base elevation the terrain starts from. \"natural\" (default) gives rolling procedural relief to sculpt against; \"flat\" gives a level plane at Y=0 for terrain that will be authored entirely by hand."
+        },
+        lodLevels: { type: "number", description: "Number of geometric LODs compiled per section, 1-5. Default 5." },
+        allowDuplicate: { type: "boolean", description: "Set true only when a second terrain node is genuinely intended. Defaults false, which refuses to add a second mesh terrain to the scene." }
+      }
+    }
+  },
+  {
+    name: "terrain_sculpt_stroke",
+    description:
+      "Applies one sculpt stroke to a mesh terrain and appends it to that node's non-destructive modifier stack. A stroke is a path of world-space dab positions; every point displaces the surface within radiusMeters of itself, and consecutive points are swept together, so a two-point path draws a straight ridge and a multi-point path draws a curve. All distances are meters. Choose the domain deliberately: \"heightfield\" displaces along world +Y, which keeps one elevation per column and is right for ordinary landscape relief; \"mesh\" displaces along the surface normal carried by each path point, which is the only way to get lateral deformation, an undercut cliff, an overhang, or an arch shoulder. Prefer several medium strokes over one enormous one -- the stack replays them in order, so later strokes see the surface the earlier ones produced.",
+    parameters: {
+      type: "object",
+      properties: {
+        nodeId: { type: "string", description: "Mesh terrain node ID. Omit when the scene contains exactly one mesh terrain." },
+        mode: {
+          type: "string",
+          enum: ["raise", "lower", "smooth", "flatten", "clay", "pinch", "scrape", "terrace", "noise"],
+          description: "Sculpt operation. `raise`/`lower` push the surface out or in along the domain axis. `smooth` averages neighbours to soften noise and stroke seams. `flatten` pulls the surface toward targetY, for plateaus, ledges, and building pads. `clay` builds up in flat-topped layers and is the best mode for massing a landform quickly. `pinch` draws the surface toward the stroke centreline, producing sharp ridge crests and arete lines. `scrape` shaves material off high points to cut cliff faces and benches. `terrace` quantises elevation into steps of terraceStepMeters. `noise` adds procedural roughness at noiseScale without changing the overall silhouette."
+        },
+        domain: {
+          type: "string",
+          enum: ["heightfield", "mesh"],
+          description: "Displacement axis. \"heightfield\" moves vertices along world +Y and cannot create an overhang. \"mesh\" (default) moves them along the picked surface normal, which is what makes overhangs, caves mouths, and lateral bulges possible. Use \"heightfield\" for hills, valleys, and terraces; use \"mesh\" for cliff faces, undercuts, and anything the user describes as jutting, leaning, or hanging over."
+        },
+        path: {
+          type: "array",
+          description: "Ordered world-space dab positions, in meters. Give at least one point; two or more sweep the brush along the path.",
+          items: {
+            type: "object",
+            properties: {
+              x: { type: "number", description: "World X in meters" },
+              y: { type: "number", description: "World Y in meters. For heightfield strokes this only picks the dab, not the result height." },
+              z: { type: "number", description: "World Z in meters" },
+              normalX: { type: "number", description: "Surface normal X at this point. Only meaningful for domain \"mesh\"; defaults to world up (0,1,0)." },
+              normalY: { type: "number", description: "Surface normal Y at this point. Defaults to 1." },
+              normalZ: { type: "number", description: "Surface normal Z at this point. Defaults to 0." },
+              weight: { type: "number", description: "Relative brush flow at this point, 0-1. Default 1. Taper the ends of a ridge by fading this toward 0." }
+            },
+            required: ["x", "y", "z"]
+          }
+        },
+        radiusMeters: { type: "number", description: "Brush radius in meters. Terrain is kilometre scale, so a mountain mass is typically 200-600 m, a ridge 60-200 m, a trail cut or boulder detail 5-15 m." },
+        strength: { type: "number", description: "Peak displacement per dab in meters, at the center of the brush. Keep it positive: `lower` and `scrape` already remove material. A 400 m peak is built from a handful of strokes at 40-120 m, not one at 400." },
+        falloff: { type: "number", description: "Edge softness 0-1. 0 is a hard-edged disc that leaves a visible rim; 1 is a fully smooth falloff. Default 0.5." },
+        targetY: { type: "number", description: "Only for mode \"flatten\": the world Y elevation in meters the surface is pulled toward. Defaults to the Y of the first path point." },
+        terraceStepMeters: { type: "number", description: "Only for mode \"terrace\": vertical spacing between terrace treads, in meters." },
+        noiseScale: { type: "number", description: "Only for mode \"noise\": world-space wavelength of the added roughness, in meters. Smaller values give finer grain." },
+        accumulate: { type: "boolean", description: "When true the stroke keeps building depth over overlapping dabs instead of settling on a single displacement. Use true to dig deep with one stroke, false (default) for controlled relief." },
+        sculptLayerId: { type: "string", description: "Optional sculpt layer ID to file this stroke under, so a group of strokes can later be faded or disabled together." }
+      },
+      required: ["mode", "path", "radiusMeters", "strength"]
+    }
+  },
+  {
+    name: "terrain_paint_weights",
+    description:
+      "Paints one of a mesh terrain's four material channels along a world-space path, and appends the paint stroke to the node's modifier stack. Channel weights blend the terrain's four surface materials; painting one channel up naturally takes weight from the others. Use `terrain_set_material_channels` first if the channels do not already mean what you need. All distances are meters.",
+    parameters: {
+      type: "object",
+      properties: {
+        nodeId: { type: "string", description: "Mesh terrain node ID. Omit when the scene contains exactly one mesh terrain." },
+        channel: {
+          type: "string",
+          enum: ["channel0", "channel1", "channel2", "channel3"],
+          description: "Which of the four material channels to paint. Call `get_terrain_state` to see what each channel is currently named. Defaults are channel0 Grass, channel1 Rock, channel2 Soil, channel3 Snow."
+        },
+        mode: { type: "string", enum: ["add", "subtract"], description: "\"add\" (default) paints the channel in; \"subtract\" erases it, letting the other channels show through." },
+        path: {
+          type: "array",
+          description: "Ordered world-space dab positions, in meters.",
+          items: {
+            type: "object",
+            properties: {
+              x: { type: "number", description: "World X in meters" },
+              y: { type: "number", description: "World Y in meters" },
+              z: { type: "number", description: "World Z in meters" },
+              normalX: { type: "number", description: "Surface normal X at this point. Defaults to world up." },
+              normalY: { type: "number", description: "Surface normal Y at this point. Defaults to 1." },
+              normalZ: { type: "number", description: "Surface normal Z at this point. Defaults to 0." },
+              weight: { type: "number", description: "Relative paint flow at this point, 0-1. Default 1." }
+            },
+            required: ["x", "y", "z"]
+          }
+        },
+        radiusMeters: { type: "number", description: "Paint radius in meters. Material bands read best when they are wide: a snowline or scree band is typically 100-400 m." },
+        strength: { type: "number", description: "Weight applied per dab, 0-1. Default 0.5. Use low values and repeated passes for a soft transition between materials." },
+        falloff: { type: "number", description: "Edge softness 0-1. Default 0.7; material boundaries almost always want a soft edge." }
+      },
+      required: ["channel", "path", "radiusMeters"]
+    }
+  },
+  {
+    name: "terrain_carve_tunnel",
+    description:
+      "Carves a tunnel straight through a mesh terrain by sweeping a capsule between two world-space portals and subtracting it with exact CSG. This produces a genuine hole with interior walls, not a masked-out region, which is why it belongs to mesh terrain and has no heightmap equivalent. Use it for road and rail tunnels, mine adits, and the trunk passage of a cave system; branch chambers and side passages are better added with `terrain_add_csg_volume`. All distances are meters.",
+    parameters: {
+      type: "object",
+      properties: {
+        nodeId: { type: "string", description: "Mesh terrain node ID. Omit when the scene contains exactly one mesh terrain." },
+        startX: { type: "number", description: "World X of the entrance portal in meters, placed on the terrain surface" },
+        startY: { type: "number", description: "World Y of the entrance portal in meters" },
+        startZ: { type: "number", description: "World Z of the entrance portal in meters" },
+        startNormalX: { type: "number", description: "Direction the entrance portal faces, X. Should point out of the hillside. Defaults to the direction of the other portal." },
+        startNormalY: { type: "number", description: "Direction the entrance portal faces, Y" },
+        startNormalZ: { type: "number", description: "Direction the entrance portal faces, Z" },
+        endX: { type: "number", description: "World X of the exit portal in meters, placed on the terrain surface" },
+        endY: { type: "number", description: "World Y of the exit portal in meters" },
+        endZ: { type: "number", description: "World Z of the exit portal in meters" },
+        endNormalX: { type: "number", description: "Direction the exit portal faces, X. Should point out of the hillside." },
+        endNormalY: { type: "number", description: "Direction the exit portal faces, Y" },
+        endNormalZ: { type: "number", description: "Direction the exit portal faces, Z" },
+        radiusMeters: { type: "number", description: "Tunnel bore radius in meters. Default 8. A single-track rail tunnel is about 4 m, a two-lane road tunnel about 6-8 m, a walkable cave passage 3-10 m." },
+        depthMeters: { type: "number", description: "How far each portal drives straight inward before the two ends are joined, in meters. Default is 1.75x radiusMeters. Larger values give a straighter approach and a more convincing portal mouth." },
+        noise: { type: "number", description: "Wall roughness, 0 or more. 0 gives a machined bore, which is correct for an engineered tunnel; 1 (default) gives rock. Raise it toward 2-3 for a natural cave." },
+        noiseScale: { type: "number", description: "World-space wavelength of the wall roughness in meters. Default 2.6. Larger values give broad undulation instead of fine pitting." }
+      },
+      required: ["startX", "startY", "startZ", "endX", "endY", "endZ"]
+    }
+  },
+  {
+    name: "terrain_add_csg_volume",
+    description:
+      "Adds or subtracts one or more closed volumes from a mesh terrain using exact live CSG, appended as a single modifier. Subtraction is how caves, chambers, alcoves, slot canyons, and windows through a fin are made; addition grows solid mass where a stroke would be awkward, such as a free-standing pillar or an arch keystone. Every volume is placed in world meters. Cutters are displaced by a named surface profile before the boolean runs, so a subtracted capsule reads as rock rather than a drilled bore. For a simple through-passage between two hillsides prefer `terrain_carve_tunnel`; use this tool for the chambers a cave system hangs off, and pass several volumes at once when they form one connected void.",
+    parameters: {
+      type: "object",
+      properties: {
+        nodeId: { type: "string", description: "Mesh terrain node ID. Omit when the scene contains exactly one mesh terrain." },
+        operation: { type: "string", enum: ["subtract", "add"], description: "\"subtract\" (default) removes the volumes from the terrain solid; \"add\" unions them into it." },
+        volumes: {
+          type: "array",
+          description: "The volumes to combine with the terrain. Fields other than `kind` and the shared surface fields apply only to the kinds named in their description.",
+          items: {
+            type: "object",
+            properties: {
+              kind: {
+                type: "string",
+                enum: ["capsule", "ellipsoid", "box", "sweep"],
+                description: "Volume shape. `capsule` is a swept sphere between two points -- passages, tubes, and windows punched through a fin. `ellipsoid` is a rotated ellipsoid -- round for a chamber, flattened for a cliff undercut. `box` is a rotated box, for the straight-walled reaches of a slot canyon. `sweep` is a chain of elliptical rings, for one continuously varying cave shell."
+              },
+              startX: { type: "number", description: "capsule: world X of the capsule axis start, in meters" },
+              startY: { type: "number", description: "capsule: world Y of the capsule axis start, in meters" },
+              startZ: { type: "number", description: "capsule: world Z of the capsule axis start, in meters" },
+              endX: { type: "number", description: "capsule: world X of the capsule axis end, in meters" },
+              endY: { type: "number", description: "capsule: world Y of the capsule axis end, in meters" },
+              endZ: { type: "number", description: "capsule: world Z of the capsule axis end, in meters" },
+              radiusMeters: { type: "number", description: "capsule: sphere radius swept along the axis, in meters" },
+              centerX: { type: "number", description: "ellipsoid and box: world X of the volume center, in meters" },
+              centerY: { type: "number", description: "ellipsoid and box: world Y of the volume center, in meters" },
+              centerZ: { type: "number", description: "ellipsoid and box: world Z of the volume center, in meters" },
+              radiusX: { type: "number", description: "ellipsoid: half-extent along the local forward axis, in meters" },
+              radiusY: { type: "number", description: "ellipsoid: half-extent along local up, in meters. Make this small relative to radiusX and radiusZ to undercut a cliff." },
+              radiusZ: { type: "number", description: "ellipsoid: half-extent along the local side axis, in meters" },
+              halfExtentX: { type: "number", description: "box: half-size along the local forward axis, in meters" },
+              halfExtentY: { type: "number", description: "box: half-size along local up, in meters" },
+              halfExtentZ: { type: "number", description: "box: half-size along the local side axis, in meters" },
+              forwardX: { type: "number", description: "ellipsoid and box: world direction the local +X axis points along. Defaults to (1,0,0)." },
+              forwardY: { type: "number", description: "ellipsoid and box: forward direction Y" },
+              forwardZ: { type: "number", description: "ellipsoid and box: forward direction Z" },
+              upX: { type: "number", description: "ellipsoid and box: optional world up reference, X. Defaults to (0,1,0)." },
+              upY: { type: "number", description: "ellipsoid and box: optional world up reference, Y" },
+              upZ: { type: "number", description: "ellipsoid and box: optional world up reference, Z" },
+              rings: {
+                type: "array",
+                description: "sweep: ordered elliptical cross-sections defining one continuous void. Three or more rings give a passage that widens and narrows convincingly.",
+                items: {
+                  type: "object",
+                  properties: {
+                    x: { type: "number", description: "World X of the ring center, in meters" },
+                    y: { type: "number", description: "World Y of the ring center, in meters" },
+                    z: { type: "number", description: "World Z of the ring center, in meters" },
+                    horizontalRadius: { type: "number", description: "Ring half-width in meters" },
+                    verticalRadius: { type: "number", description: "Ring half-height in meters. Below the horizontal radius it reads as a bedding-plane crawl; above it, as a rift." }
+                  },
+                  required: ["x", "y", "z", "horizontalRadius", "verticalRadius"]
+                }
+              },
+              surface: {
+                type: "string",
+                enum: ["cave", "arch", "overhang", "canyon", "hoodoo", "default", "none"],
+                description: "Displacement character applied to the cut face before the boolean runs. Pick the one that matches what the volume is for; \"none\" leaves an analytic, machined-looking surface and is only right for engineered geometry."
+              },
+              noise: { type: "number", description: "Relative cross-section roughness, 0 or more. 0 is smooth." },
+              noiseScale: { type: "number", description: "World-space wavelength of the close-surface roughness, in meters." },
+              interior: { type: "string", enum: ["rock", "ember"], description: "Material classification for the faces this subtraction exposes." }
+            },
+            required: ["kind"]
+          }
+        }
+      },
+      required: ["volumes"]
+    }
+  },
+  {
+    name: "terrain_refine_density",
+    description:
+      "Locally raises mesh density on a terrain so a following sculpt stroke or CSG cut has enough vertices to resolve detail. Terrain starts at a density tuned for kilometre-scale relief, so fine work -- a cave mouth, a trail cut, a rock shelf -- needs refinement first or it will come out mushy. Use \"tessellate\" to subdivide in place, and \"remesh\" to rebuild the region at an even edge length when repeated sculpting has left stretched triangles. All distances are meters.",
+    parameters: {
+      type: "object",
+      properties: {
+        nodeId: { type: "string", description: "Mesh terrain node ID. Omit when the scene contains exactly one mesh terrain." },
+        mode: { type: "string", enum: ["tessellate", "remesh"], description: "\"tessellate\" (default) subdivides existing triangles inside the sphere. \"remesh\" rebuilds them toward a uniform edge length, which also relaxes distorted topology." },
+        x: { type: "number", description: "World X of the refinement sphere center, in meters" },
+        y: { type: "number", description: "World Y of the refinement sphere center, in meters" },
+        z: { type: "number", description: "World Z of the refinement sphere center, in meters" },
+        radiusMeters: { type: "number", description: "Radius of the refined region in meters. Cover the whole area of the planned edit plus a margin." },
+        targetEdgeLengthMeters: { type: "number", description: "Desired triangle edge length in meters inside the region. A cave mouth wants roughly 0.5-2 m; a hillside 5-20 m. Smaller values cost geometry quickly." }
+      },
+      required: ["x", "y", "z", "radiusMeters", "targetEdgeLengthMeters"]
+    }
+  },
+  {
+    name: "terrain_set_material_channels",
+    description:
+      "Renames, recolours, or sets roughness on a mesh terrain's four material channels. The channels are fixed at four and cannot be added to; this tool decides what they mean. Do this before painting so the channel names in `terrain_paint_weights` match the biome the user asked for.",
+    parameters: {
+      type: "object",
+      properties: {
+        nodeId: { type: "string", description: "Mesh terrain node ID. Omit when the scene contains exactly one mesh terrain." },
+        channels: {
+          type: "array",
+          description: "The channels to change. Omit any channel to leave it as it is.",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", enum: ["channel0", "channel1", "channel2", "channel3"], description: "Which channel this entry configures" },
+              name: { type: "string", description: "Display name, for example \"Alpine Grass\", \"Scree\", \"Wet Sand\"" },
+              color: { type: "string", description: "Base colour as a hex string such as \"#4f7d32\"" },
+              roughness: { type: "number", description: "Surface roughness 0-1. Rock and soil sit near 0.85-0.95; wet stone and packed snow sit lower, near 0.6-0.7." }
+            },
+            required: ["id"]
+          }
+        }
+      },
+      required: ["channels"]
+    }
+  },
+  // -- Forests -------------------------------------------------------------
+  {
+    name: "create_forest_field",
+    description:
+      "Creates a forest field: a stand described as a spline on the ground rather than a list of trees. Nothing grows until the shape has at least two control points and `grow_forest_field` runs, so the normal sequence is create, add points, then grow. Returns the field ID every other forest_* tool takes. Forests sit on the terrain's height field, so make the terrain first when the user wants both.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Display name for the field, for example \"North Woods\"" },
+        preset: {
+          type: "string",
+          enum: ["mossy-old-growth", "temperate-mixed", "ancient-oak-grove", "boreal-conifer", "primeval-redwood", "tropical-wet", "palm-oasis", "savanna", "arid-woodland"],
+          description: "The stand type. This decides the species mix, the floor, and the stems per hectare. Pick by climate and age: boreal-conifer for cold spruce/fir, temperate-mixed for ordinary broadleaf, primeval-redwood or mossy-old-growth for a tall closed interior, tropical-wet or palm-oasis for jungle and coast, savanna or arid-woodland for open dry ground. Defaults to mossy-old-growth."
+        },
+        points: {
+          type: "array",
+          description: "Optional control points to lay down immediately, so a field can be created and shaped in one call. Each is a point on the ground plane in world meters; height comes from the terrain.",
+          items: {
+            type: "object",
+            properties: { x: { type: "number" }, z: { type: "number" } },
+            required: ["x", "z"]
+          }
+        },
+        closed: { type: "boolean", description: "True (default) makes the spline a closed loop enclosing an area. False makes it an open belt of `width` either side, for a treeline, hedgerow, or river margin." },
+        grow: { type: "boolean", description: "Grow the stand immediately after creating it. Only meaningful when `points` supplies at least two points. Defaults to true when points are given." }
+      }
+    }
+  },
+  {
+    name: "add_forest_points",
+    description:
+      "Appends control points to a forest field's spline, in order. The curve through them is a centripetal Catmull-Rom, so points may be placed close together without the shape cusping. Adding points marks the field dirty; it does not regrow until `grow_forest_field` runs.",
+    parameters: {
+      type: "object",
+      properties: {
+        fieldId: { type: "string", description: "Forest field ID. Omit when exactly one field exists." },
+        points: {
+          type: "array",
+          description: "Ground-plane points in world meters, in the order they should join.",
+          items: {
+            type: "object",
+            properties: { x: { type: "number" }, z: { type: "number" } },
+            required: ["x", "z"]
+          }
+        }
+      },
+      required: ["points"]
+    }
+  },
+  {
+    name: "configure_forest_field",
+    description:
+      "Changes a forest field's shape and stand settings. `feather` is the number that matters most: it is the depth in meters over which the stand thins out at its boundary, and a hard edge is what makes a painted forest read as a decal rather than a place. Twenty to forty meters reads as a real wood; zero reads as a surveyed line. Marks the field dirty.",
+    parameters: {
+      type: "object",
+      properties: {
+        fieldId: { type: "string", description: "Forest field ID. Omit when exactly one field exists." },
+        preset: { type: "string", enum: ["mossy-old-growth", "temperate-mixed", "ancient-oak-grove", "boreal-conifer", "primeval-redwood", "tropical-wet", "palm-oasis", "savanna", "arid-woodland"], description: "Change the stand type." },
+        density: { type: "number", description: "Multiplier on the preset's stems per hectare. 1 is the preset's own figure; fields open at 0.6 because a full-density stand over a couple of hundred meters is several hundred stems. Above about 180 stems the editor is measured to struggle." },
+        feather: { type: "number", description: "Meters the stand fades across at its boundary. 20-40 for a natural wood." },
+        width: { type: "number", description: "Half-width in meters of an open belt. Ignored when the field is a closed loop." },
+        closed: { type: "boolean", description: "Whether the spline encloses an area (true) or is a belt (false)." },
+        seed: { type: "number", description: "Layout seed. Change it to reshuffle the same stand into a different arrangement." },
+        visible: { type: "boolean", description: "Whether the stand draws in the viewport." },
+        name: { type: "string", description: "Rename the field." }
+      }
+    }
+  },
+  {
+    name: "grow_forest_field",
+    description:
+      "Grows a forest field: lays out the stems, scatters the boulders, and reports what was produced. This is the expensive step in the whole forest system, so it is explicit and never implied by editing the shape. Growing again after a change replaces the previous stand.",
+    parameters: {
+      type: "object",
+      properties: {
+        fieldId: { type: "string", description: "Forest field ID. Omit to grow every dirty field." }
+      }
+    }
+  },
+  {
+    name: "get_forest_state",
+    description:
+      "Lists every forest field with its shape, stand settings, and — where it has been grown — the stem count, boulder count, and which tree prototypes it uses. Read this before a follow-up edit so a change lands relative to what is already standing.",
+    parameters: { type: "object", properties: {} }
+  },
+  {
+    name: "delete_forest_field",
+    description: "Removes a forest field and the stand grown from it.",
+    parameters: {
+      type: "object",
+      properties: {
+        fieldId: { type: "string", description: "Forest field ID." }
+      },
+      required: ["fieldId"]
+    }
+  },
+  // -- Combat VFX ----------------------------------------------------------
+  {
+    name: "cast_vfx_ability",
+    description:
+      "Fires one of the seven combat abilities in the viewport. Each is a skillshot: it travels out from an origin along a flat heading, erupts at the far end, then burns down and clears itself. Use this to show the user what an ability looks like, or to dress a scene for a screenshot. The cast plays once and is not saved with the scene. A cast asked for before the viewport is running is held and plays as soon as it is, so this does not have to be ordered after opening one. Abilities are hand-written GLSL and draw on the WebGL backend, so nothing appears if the editor has been switched to WebGPU.",
+    parameters: {
+      type: "object",
+      properties: {
+        element: {
+          type: "string",
+          enum: ["pyre", "kraken", "electrical", "earth", "portal", "aether", "firePortal"],
+          description: "Which ability. pyre is a ring of burning blades over a molten crater; kraken is cephalopod arms hauling out of a rift and hammering the ground; electrical is a dark sphere hovering in a containment platform with arcs tearing off it; earth is the one line cast, laying stone plates along the aimed line and raising a tower at the end; portal is a standing verdant gate that stays lit; aether is a hoop forged lying down then hinged upright; firePortal is a black disc struck into the air with sparks thrown off its ring."
+        },
+        x: { type: "number", description: "World X the cast starts from, in meters. Defaults to 0." },
+        y: { type: "number", description: "World Y of the cast origin, in meters. Ground level unless the ability hangs in the air. Defaults to 0." },
+        z: { type: "number", description: "World Z the cast starts from, in meters. Defaults to 0." },
+        directionX: { type: "number", description: "Flat heading X. Need not be unit length; it is normalised. Defaults to 0." },
+        directionZ: { type: "number", description: "Flat heading Z. Defaults to 1, i.e. straight along +Z." },
+        distance: { type: "number", description: "How far the cast reaches, in meters. 20 is a natural skillshot range; clamped to 1-400." }
+      },
+      required: ["element"]
+    }
+  },
+  {
+    name: "list_vfx_abilities",
+    description:
+      "Lists the combat abilities available to cast, with the key each is bound to in the editor and how each is aimed (a line cast travels along the aimed line; a far cast lands its footprint at the far end; gate, ring and scribe casts build a structure). Read this before casting so the ability matches what the user described.",
+    parameters: { type: "object", properties: {} }
+  },
+  {
+    name: "get_terrain_state",
+    description:
+      "Returns a mesh terrain node's current authoring state: world size and section size in meters, seed, base profile, LOD count, the four material channels, and a summary of every modifier in the stack in evaluation order. Read this before a follow-up edit so new strokes land relative to what is already there instead of guessing. The full point list of each stroke is not returned, only its bounds, so this stays cheap on a heavily sculpted terrain.",
+    parameters: {
+      type: "object",
+      properties: {
+        nodeId: { type: "string", description: "Mesh terrain node ID. Omit when the scene contains exactly one mesh terrain." },
+        maxModifiers: { type: "number", description: "Maximum modifier summaries to return, most recent last. Default 60." }
+      }
+    }
   }
 ];
 
-/** Viewport-editor Copilot tools. */
-export const EDITOR_COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = COPILOT_TOOL_DECLARATIONS;
+/** Viewport-editor Copilot tools only. Standalone HTML generation belongs to Morphus. */
+export const EDITOR_COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] =
+  COPILOT_TOOL_DECLARATIONS.filter((tool) => !tool.name.startsWith("morphus_") && tool.name !== "generate_game_html");
+
+/** Only `generate_game_html` — used when the model's task is a standalone game or browser-based interactive experience */
+export const GAME_TOOL_DECLARATIONS: CopilotToolDeclaration[] =
+  COPILOT_TOOL_DECLARATIONS.filter((tool) =>
+    tool.name === "generate_game_html" || tool.name.startsWith("morphus_")
+  );
 
 /**
  * Return `true` when the user's prompt is clearly a standalone-game or browser-based
- * interactive request (not a scene-editing request).
+ * interactive request (not a scene-editing request). In that case we expose only
+ * `generate_game_html`
+ * instead of the full editor tool catalog so the model context stays lean.
  */
 export function isGameGenerationPrompt(prompt: string): boolean {
   const lower = prompt.toLowerCase();

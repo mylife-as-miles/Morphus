@@ -1,0 +1,42 @@
+{
+  "name": "@blud/shared",
+  "version": "0.1.11",
+  "description": "Shared scene types and utilities used across Web Hammer packages.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup --config ../../scripts/tsup.package.config.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vibe-stack/blob.git",
+    "directory": "packages/shared"
+  },
+  "bugs": {
+    "url": "https://github.com/vibe-stack/blob/issues"
+  },
+  "homepage": "https://github.com/vibe-stack/blob/tree/main/packages/shared",
+  "devDependencies": {
+    "@types/three": "^0.184.1"
+  },
+  "dependencies": {
+    "three": "0.184.0"
+  }
+}

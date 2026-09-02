@@ -1,0 +1,41 @@
+{
+  "name": "@blud/geometry-kernel",
+  "version": "0.1.11",
+  "description": "Brush, polygon, and editable mesh operations for Web Hammer.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup --config ../../scripts/tsup.package.config.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vibe-stack/blob.git",
+    "directory": "packages/geometry-kernel"
+  },
+  "bugs": {
+    "url": "https://github.com/vibe-stack/blob/issues"
+  },
+  "homepage": "https://github.com/vibe-stack/blob/tree/main/packages/geometry-kernel",
+  "dependencies": {
+    "@blud/shared": "*",
+    "clipper2-ts": "latest",
+    "earcut": "^3.0.2"
+  }
+}

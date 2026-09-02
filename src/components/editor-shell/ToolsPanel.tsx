@@ -2,15 +2,17 @@ import type { ComponentType, ReactNode } from "react";
 import { BellRing, Cable, FolderTree, Globe2, Mic, Paintbrush, SlidersHorizontal, SwatchBook, User, Wrench, X } from "lucide-react";
 import type { GridSnapValue } from "@blud/render-pipeline";
 import type { BrushShape, EntityType, LightType, PrimitiveShape, SkateparkElementType } from "@blud/shared";
-import { defaultTools, type ToolId } from "@blud/tool-system";
+import { coreTools, defaultTools, type ToolId } from "@blud/tool-system";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CreationToolBar } from "@/components/editor-shell/CreationToolBar";
 import { FloorPresetsPanel } from "@/components/editor-shell/FloorPresetsPanel";
 import { MeshEditToolBars } from "@/components/editor-shell/MeshEditToolBars";
 import { SculptToolBar } from "@/components/editor-shell/SculptToolBar";
+import { ForestToolsSection } from "@/components/editor-shell/ForestToolsSection";
+import { TerrainToolsSection } from "@/components/editor-shell/TerrainToolsSection";
 import { PhysicsPlaybackControl } from "@/components/editor-shell/PhysicsPlaybackControl";
-import { SnapControl } from "@/components/editor-shell/SnapControl";
+import { GridSnapControl } from "@/components/editor-shell/GridSnapControl";
 import { ViewModeControl } from "@/components/editor-shell/ViewModeControl";
 import { toolIconFor } from "@/components/editor-shell/icons";
 import type { FloorPresetId } from "@/lib/floor-presets";
@@ -43,7 +45,8 @@ type ToolsPanelProps = {
   aiModelPlacementActive: boolean;
   activeToolId: ToolId;
   currentSnapSize: GridSnapValue;
-  gridInfinite: boolean;
+  hasMeshTerrain: boolean;
+  onCreateMeshTerrain: () => void;
   gridSnapValues: readonly GridSnapValue[];
   meshEditMode: MeshEditMode;
   onClose: () => void;
@@ -71,7 +74,6 @@ type ToolsPanelProps = {
   onStartAiModelPlacement: () => void;
   onSelectBrushShape: (shape: BrushShape) => void;
   onSetMeshEditMode: (mode: MeshEditMode) => void;
-  onSetGridInfinite: (infinite: boolean) => void;
   onSetSnapEnabled: (enabled: boolean) => void;
   onSetSnapSize: (snapSize: GridSnapValue) => void;
   onStopPhysics: () => void;
@@ -103,8 +105,9 @@ export function ToolsPanel({
   aiModelPlacementActive,
   activeToolId,
   currentSnapSize,
-  gridInfinite,
   gridSnapValues,
+  hasMeshTerrain,
+  onCreateMeshTerrain,
   meshEditMode,
   onClose,
   onMeshEditToolbarAction,
@@ -133,7 +136,6 @@ export function ToolsPanel({
   onStartAiModelPlacement,
   onSelectBrushShape,
   onSetMeshEditMode,
-  onSetGridInfinite,
   onSetSnapEnabled,
   onSetSnapSize,
   onStopPhysics,
@@ -188,7 +190,7 @@ export function ToolsPanel({
         <div className="space-y-4 p-4">
           <PanelSection title="Tool Modes">
             <div className="grid grid-cols-2 gap-2">
-              {defaultTools.map((tool) => (
+              {coreTools.map((tool) => (
                 <ToolModeButton
                   active={tool.id === activeToolId}
                   key={tool.id}
@@ -198,6 +200,19 @@ export function ToolsPanel({
                 />
               ))}
             </div>
+          </PanelSection>
+
+          <PanelSection title="Terrain">
+            <TerrainToolsSection
+              activeToolId={activeToolId}
+              hasMeshTerrain={hasMeshTerrain}
+              onCreateMeshTerrain={onCreateMeshTerrain}
+              onSetToolId={onSetToolId}
+            />
+          </PanelSection>
+
+          <PanelSection title="Forest">
+            <ForestToolsSection activeToolId={activeToolId} onSetToolId={onSetToolId} />
           </PanelSection>
 
           <PanelSection title="Details">
@@ -238,11 +253,9 @@ export function ToolsPanel({
           <PanelSection title="Viewport">
             <div className="flex flex-col gap-2">
               <ViewModeControl currentViewMode={viewMode} onSetViewMode={onSetViewMode} />
-              <SnapControl
+              <GridSnapControl
                 currentSnapSize={currentSnapSize}
-                gridInfinite={gridInfinite}
                 gridSnapValues={gridSnapValues}
-                onSetGridInfinite={onSetGridInfinite}
                 onSetSnapEnabled={onSetSnapEnabled}
                 onSetSnapSize={onSetSnapSize}
                 snapEnabled={snapEnabled}
@@ -410,6 +423,16 @@ function describeTool(toolId: ToolId) {
       return "Add path points directly in the viewport, then refine them from the scene and hooks panels.";
     case "path-edit":
       return "Edit existing path nodes in the viewport and scene panels.";
+    case "terrain-sculpt":
+      return "Sculpt a mesh terrain. Heightfield keeps displacement vertical; Mesh follows the picked normal, which is what carves overhangs.";
+    case "terrain-paint":
+      return "Paint or erase one of the four terrain material weight channels.";
+    case "terrain-density":
+      return "Add local mesh density so fine detail has somewhere to live.";
+    case "terrain-tunnel":
+      return "Press one portal, drag to the second, then release. The swept boolean stays editable in the modifier stack.";
+    case "terrain-dig":
+      return "Hold on the terrain to drill along the camera ray. Touching an existing hole extends that modifier.";
     default:
       return "Pick a tool mode to start editing the scene.";
   }

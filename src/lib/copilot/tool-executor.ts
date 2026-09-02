@@ -110,9 +110,27 @@ import {
   resolveProceduralWorldPreset,
   resolveSceneGraph,
   validateProceduralWorldConfig,
+  createDefaultTerrainNodeData,
+  isMeshTerrainNode,
   vec2,
   vec3
 } from "@blud/shared";
+// Copilot-authored terrain goes through the same factories as hand authoring, so
+// a stroke placed by the model is indistinguishable from one placed by hand. The
+// authoring subpath keeps the CSG evaluator and three-bvh-csg out of this module.
+import {
+  appendBrushPoint,
+  createBooleanVolumeModifier,
+  createBrushStroke,
+  createRemeshModifier,
+  createTessellateModifier,
+  createTunnelModifier,
+  createWeightPaintStroke
+} from "@blud/terrain/authoring";
+import { isVfxViewportReady, pendingVfxCastCount, requestVfxCast } from "@/state/vfx-runtime";
+import { ELEMENT_META, ELEMENTS, castShapeOf, type ElementId } from "@blud/vfx";
+import { forestStore } from "@/state/forest-store";
+import { FOREST_PRESETS, type ForestField, type ForestPresetId } from "@blud/forest";
 import { getProceduralWorldRuntimeStatus } from "@/lib/procedural-world/runtime-diagnostics";
 import { requestProceduralWorldRuntimeAction } from "@/lib/procedural-world/runtime-actions";
 import type {
@@ -133,10 +151,20 @@ import type {
   MeshModelingModifier,
   MeshPolyGroup,
   MeshSmoothingGroup,
+  MeshBrushDomain,
+  MeshBrushMode,
+  MeshTerrainState,
   ModelNode,
   SceneHook,
   ScenePathDefinition,
   SceneSettings,
+  CutterVolume,
+  TerrainCutterSurfaceProfile,
+  TerrainMaterialChannel,
+  TerrainModifier,
+  TerrainNode,
+  TerrainPaintChannelId,
+  TerrainPaintMode,
   Transform,
   Vec3,
   SkateparkElementType
@@ -191,6 +219,24 @@ export type CopilotToolExecutionContext = {
   copilotListSkillReferences?: (skillId?: string) => Record<string, unknown>;
   copilotReadSkillReference?: (skillId: string, referenceId: string, options?: { endLine?: number; maxChars?: number; startLine?: number }) => Record<string, unknown>;
   copilotSearchSkillReferences?: (query: string, options?: { maxResults?: number; referenceIds?: string[]; skillId?: string }) => Record<string, unknown>;
+  morphusCreateFile?: (path: string, content: string) => Record<string, unknown>;
+  morphusListFiles?: () => Record<string, unknown>;
+  morphusReadFile?: (path: string, options?: { endLine?: number; maxChars?: number; startLine?: number }) => Record<string, unknown>;
+  morphusSearchFiles?: (query: string, options?: { includeAssets?: boolean; maxResults?: number; pathGlob?: string; useRegex?: boolean }) => Record<string, unknown>;
+  morphusRequestDeleteFile?: (path: string, reason: string) => Record<string, unknown>;
+  morphusRequestRenameFile?: (fromPath: string, toPath: string, reason: string) => Record<string, unknown>;
+  morphusWriteFile?: (path: string, content: string) => Record<string, unknown>;
+  onGeneratedGame?: (title: string, html: string, files?: Array<{ content: string; path: string }>) => void;
+  /**
+   * Called after a terrain tool has committed a change to a mesh terrain node.
+   *
+   * The document edit itself is undoable and complete without this; the hook
+   * exists because the mesh terrain surface is a compiled artifact, and a host
+   * that caches compiled sections needs to know which node's stack moved.
+   * Optional: terrain tools work without it, they just may not repaint until
+   * the viewport notices the document revision on its own.
+   */
+  onTerrainStateChanged?: (nodeId: string) => void;
 };
 
 function num(args: Args, key: string, fallback = 0): number {
@@ -230,6 +276,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function recordArray(args: Args, key: string): Record<string, unknown>[] {
   const value = args[key];
   return Array.isArray(value) ? value.filter((entry): entry is Record<string, unknown> => isRecord(entry)) : [];
+}
+
+function fileBundle(value: unknown): Array<{ content: string; path: string }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const path = typeof entry.path === "string" ? entry.path.trim() : "";
+    const content = typeof entry.content === "string" ? entry.content : "";
+    return path && content ? [{ content, path }] : [];
+  });
 }
 
 const MODELING_GROUP_COLORS = ["#f59e0b", "#10b981", "#38bdf8", "#f472b6", "#a78bfa", "#fb7185"];
@@ -1505,6 +1567,39 @@ function updateBehaviorTreeNodeData(tree: BehaviorTree, nodeId: string, args: Ar
   return found ? { ...tree, nodes } : null;
 }
 
+function isForestPreset(value: string): value is ForestPresetId {
+  return FOREST_PRESETS.some((preset) => preset.id === value);
+}
+
+function findForestField(fieldId: string): ForestField | undefined {
+  return forestStore.getSnapshot().fields.find((field) => field.id === fieldId);
+}
+
+/**
+ * Resolves the field a forest tool acts on, or an error string to return.
+ *
+ * Omitting the id is allowed only when there is exactly one field, matching how
+ * the terrain tools treat a single mesh terrain: convenient in the common case,
+ * and explicitly ambiguous rather than silently arbitrary once there are two.
+ */
+function resolveForestField(fieldId: string | undefined): ForestField | string {
+  const fields = forestStore.getSnapshot().fields;
+  if (fieldId) {
+    const match = fields.find((field) => field.id === fieldId);
+    return match ?? fail(`Forest field "${fieldId}" was not found.`);
+  }
+  if (fields.length === 1) return fields[0]!;
+  if (fields.length === 0) return fail("No forest fields exist. Call create_forest_field first.");
+  return fail(`The scene has ${fields.length} forest fields; pass fieldId to say which one.`);
+}
+
+/** Ground-plane control points from a tool argument. */
+function forestPoints(args: Args): Array<{ x: number; z: number }> {
+  return recordArray(args, "points")
+    .map((record) => ({ x: numFromRecord(record, "x"), z: numFromRecord(record, "z") }))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.z));
+}
+
 function finiteArg(args: Args, key: string, fallback: number): number {
   const value = args[key];
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -1586,6 +1681,245 @@ function proceduralWorldToolResult(data: ProceduralWorldNodeData, detail: Record
 function applyFiniteArg(args: Args, key: string, apply: (value: number) => void): void {
   const value = args[key];
   if (typeof value === "number" && Number.isFinite(value)) apply(value);
+}
+
+// --- Mesh terrain -----------------------------------------------------------
+
+const MESH_BRUSH_MODES: MeshBrushMode[] = [
+  "raise", "lower", "smooth", "flatten", "clay", "pinch", "scrape", "terrace", "noise"
+];
+
+const TERRAIN_PAINT_CHANNELS: TerrainPaintChannelId[] = ["channel0", "channel1", "channel2", "channel3"];
+
+const TERRAIN_CUTTER_SURFACES = ["cave", "arch", "overhang", "canyon", "hoodoo", "default", "none"];
+
+type TerrainPathSample = {
+  normal: Vec3;
+  point: Vec3;
+  weight: number;
+};
+
+function resolveMeshTerrainNode(scene: SceneDocument, requestedId?: string): TerrainNode {
+  if (requestedId) {
+    const node = scene.getNode(requestedId);
+    if (node && isMeshTerrainNode(node)) return node;
+    throw new Error(`Mesh terrain node "${requestedId}" was not found.`);
+  }
+  const terrains = Array.from(scene.nodes.values()).filter(isMeshTerrainNode);
+  if (terrains.length === 1) return terrains[0]!;
+  if (terrains.length === 0) throw new Error("No mesh terrain exists. Call create_mesh_terrain first.");
+  throw new Error(`The scene has ${terrains.length} mesh terrain nodes. Provide nodeId explicitly.`);
+}
+
+function meshTerrainState(node: TerrainNode): MeshTerrainState {
+  const state = node.data.meshTerrain;
+  if (!state) throw new Error(`Terrain node "${node.id}" carries no mesh terrain state.`);
+  return state;
+}
+
+/**
+ * Runs `mutate` against a clone of the node's terrain state and commits it.
+ *
+ * Every terrain tool goes through here so a Copilot edit is one undoable
+ * document command, exactly like a hand edit: mutate a clone, then hand the
+ * whole node to the command stack rather than editing live scene state.
+ */
+function updateMeshTerrain(
+  editor: EditorCore,
+  context: CopilotToolExecutionContext,
+  requestedId: string | undefined,
+  label: string,
+  mutate: (state: MeshTerrainState, node: TerrainNode) => Record<string, unknown>
+): string {
+  const node = resolveMeshTerrainNode(editor.scene, requestedId);
+  const nextNode = structuredClone(node);
+  const detail = mutate(meshTerrainState(nextNode), nextNode);
+  editor.execute(createSetNodeCommand(editor.scene, node.id, nextNode, node));
+  context.onTerrainStateChanged?.(node.id);
+  return ok({ label, modifierCount: meshTerrainState(nextNode).modifiers.length, nodeId: node.id, ...detail });
+}
+
+/**
+ * Appends a modifier to a serialized stack, keeping authored order explicit.
+ *
+ * `ModifierStack` stamps `sequence` when a live editor gesture adds a modifier;
+ * a document-level append has to do the same, or an equal-priority stroke could
+ * evaluate before the surface it was drawn against.
+ */
+function appendTerrainModifier(state: MeshTerrainState, modifier: TerrainModifier): TerrainModifier {
+  const highest = state.modifiers.reduce((max, entry) => Math.max(max, entry.sequence ?? 0), 0);
+  modifier.sequence = highest + 1;
+  state.modifiers.push(modifier);
+  return modifier;
+}
+
+function terrainNormalFromArgs(entry: Args, prefix: string, fallback: Vec3): Vec3 {
+  const keys = [`${prefix}X`, `${prefix}Y`, `${prefix}Z`];
+  if (!keys.some((key) => typeof entry[key] === "number")) return fallback;
+  const normal = vec3(num(entry, keys[0]!), num(entry, keys[1]!), num(entry, keys[2]!));
+  return Math.hypot(normal.x, normal.y, normal.z) > 1e-6 ? normal : fallback;
+}
+
+function terrainPathSamples(args: Args, key = "path"): TerrainPathSample[] {
+  return recordArray(args, key).map((entry) => ({
+    normal: terrainNormalFromArgs(entry, "normal", vec3(0, 1, 0)),
+    point: vec3(num(entry, "x"), num(entry, "y"), num(entry, "z")),
+    weight: clamp01(optionalNum(entry, "weight") ?? 1)
+  }));
+}
+
+function terrainPortalNormal(args: Args, prefix: string, from: Vec3, toward: Vec3): Vec3 {
+  const outward = vec3(from.x - toward.x, from.y - toward.y, from.z - toward.z);
+  const length = Math.hypot(outward.x, outward.y, outward.z);
+  const fallback = length > 1e-6
+    ? vec3(outward.x / length, outward.y / length, outward.z / length)
+    : vec3(0, 1, 0);
+  return terrainNormalFromArgs(args, prefix, fallback);
+}
+
+function parseTerrainChannelColor(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.min(0xffffff, Math.floor(value)));
+  }
+  if (typeof value !== "string") return undefined;
+  const hex = value.trim().replace(/^#/, "");
+  return /^[0-9a-fA-F]{6}$/.test(hex) ? Number.parseInt(hex, 16) : undefined;
+}
+
+type TerrainCutterBaseFields = {
+  interior?: "ember" | "rock";
+  noise?: number;
+  noiseScale?: number;
+  surface?: TerrainCutterSurfaceProfile;
+};
+
+function terrainCutterBaseFromArgs(entry: Args): TerrainCutterBaseFields {
+  const surface = optionalStr(entry, "surface");
+  const interior = optionalStr(entry, "interior");
+  return {
+    ...(surface && TERRAIN_CUTTER_SURFACES.includes(surface) ? { surface } : {}),
+    ...(optionalNum(entry, "noise") === undefined ? {} : { noise: Math.max(0, num(entry, "noise")) }),
+    ...(optionalNum(entry, "noiseScale") === undefined ? {} : { noiseScale: Math.max(0.05, num(entry, "noiseScale")) }),
+    ...(interior === "rock" || interior === "ember" ? { interior } : {})
+  };
+}
+
+/** Builds one world-space CSG operand, or throws with the reason it could not. */
+function terrainCutterFromArgs(entry: Args, index: number): CutterVolume {
+  const base = terrainCutterBaseFromArgs(entry);
+  const kind = str(entry, "kind");
+  const center = vec3(num(entry, "centerX"), num(entry, "centerY"), num(entry, "centerZ"));
+  const forward = terrainNormalFromArgs(entry, "forward", vec3(1, 0, 0));
+  const up = terrainNormalFromArgs(entry, "up", vec3(0, 1, 0));
+
+  switch (kind) {
+    case "capsule": {
+      const radius = finiteArg(entry, "radiusMeters", 0);
+      if (!(radius > 0)) throw new Error(`volumes[${index}]: capsule needs radiusMeters greater than 0.`);
+      return {
+        ...base,
+        end: vec3(num(entry, "endX"), num(entry, "endY"), num(entry, "endZ")),
+        kind: "capsule",
+        radius,
+        start: vec3(num(entry, "startX"), num(entry, "startY"), num(entry, "startZ"))
+      };
+    }
+    case "ellipsoid": {
+      const radii = vec3(
+        finiteArg(entry, "radiusX", 0),
+        finiteArg(entry, "radiusY", 0),
+        finiteArg(entry, "radiusZ", 0)
+      );
+      if (radii.x <= 0 || radii.y <= 0 || radii.z <= 0) {
+        throw new Error(`volumes[${index}]: ellipsoid needs radiusX, radiusY, and radiusZ greater than 0.`);
+      }
+      return { ...base, center, forward, kind: "ellipsoid", radii, up };
+    }
+    case "box": {
+      const halfExtents = vec3(
+        finiteArg(entry, "halfExtentX", 0),
+        finiteArg(entry, "halfExtentY", 0),
+        finiteArg(entry, "halfExtentZ", 0)
+      );
+      if (halfExtents.x <= 0 || halfExtents.y <= 0 || halfExtents.z <= 0) {
+        throw new Error(`volumes[${index}]: box needs halfExtentX, halfExtentY, and halfExtentZ greater than 0.`);
+      }
+      return { ...base, center, forward, halfExtents, kind: "box", up };
+    }
+    case "sweep": {
+      const rings = recordArray(entry, "rings").map((ring) => ({
+        horizontalRadius: Math.max(0.01, finiteArg(ring, "horizontalRadius", 1)),
+        verticalRadius: Math.max(0.01, finiteArg(ring, "verticalRadius", 1)),
+        x: num(ring, "x"),
+        y: num(ring, "y"),
+        z: num(ring, "z")
+      }));
+      if (rings.length < 2) throw new Error(`volumes[${index}]: sweep needs at least 2 rings.`);
+      return { ...base, kind: "sweep", rings };
+    }
+    default:
+      throw new Error(`volumes[${index}]: kind must be capsule, ellipsoid, box, or sweep.`);
+  }
+}
+
+/** Modifier summary for `get_terrain_state`: shape and extent, never point lists. */
+function summarizeTerrainModifier(modifier: TerrainModifier): Record<string, unknown> {
+  const base = {
+    bounds: modifier.bounds,
+    enabled: modifier.enabled,
+    id: modifier.id,
+    sequence: modifier.sequence ?? null,
+    type: modifier.type
+  };
+
+  switch (modifier.type) {
+    case "brush-stroke":
+      return {
+        ...base,
+        domain: modifier.domain,
+        mode: modifier.mode,
+        pointCount: modifier.points.length,
+        radiusMeters: modifier.radius,
+        strength: modifier.strength
+      };
+    case "weight-paint":
+      return {
+        ...base,
+        channel: modifier.channel,
+        mode: modifier.mode,
+        pointCount: modifier.points.length,
+        radiusMeters: modifier.radius
+      };
+    case "boolean-subtract":
+      return {
+        ...base,
+        branchCount: modifier.carves?.length ?? 0,
+        depthMeters: modifier.depth,
+        portals: modifier.portals,
+        radiusMeters: modifier.radius,
+        shape: modifier.shape
+      };
+    case "boolean-volume":
+      return {
+        ...base,
+        operation: modifier.operation,
+        volumeCount: modifier.volumes.length,
+        volumeKinds: modifier.volumes.map((volume) => volume.kind)
+      };
+    case "remesh":
+    case "tessellate":
+      return { ...base, center: modifier.center, radiusMeters: modifier.radius, targetEdgeLengthMeters: modifier.targetEdgeLength };
+    case "material-settings":
+      return { ...base, channels: modifier.settings.channels };
+    case "sculpt-layer":
+      return { ...base, name: modifier.name, opacity: modifier.opacity };
+    case "noise":
+      return { ...base, amplitude: modifier.amplitude, frequency: modifier.frequency };
+    case "field-displacement":
+      return { ...base, fieldId: modifier.fieldId, scale: modifier.scale };
+    default:
+      return base;
+  }
 }
 
 export async function executeTool(
@@ -1900,6 +2234,484 @@ async function executeToolInner(editor: EditorCore, name: string, args: Args, co
         systems: runtime.systems,
       });
     }
+
+    // ── Mesh terrain ──────────────────────────────────────────
+    case "create_mesh_terrain": {
+      const existing = Array.from(scene.nodes.values()).filter(isMeshTerrainNode);
+      if (existing.length > 0 && bool(args, "allowDuplicate") !== true) {
+        return fail("A mesh terrain already exists. Pass its nodeId to the terrain tools, or set allowDuplicate to true only when a second terrain is intentional.");
+      }
+
+      const seed = Math.floor(finiteArg(args, "seed", 1));
+      const data = createDefaultTerrainNodeData("mesh", seed);
+      const state = data.meshTerrain;
+      if (!state) return fail("Mesh terrain state was not initialized.");
+
+      state.worldSize = Math.min(16_384, Math.max(256, finiteArg(args, "worldSizeMeters", state.worldSize)));
+      state.sectionSize = Math.min(1024, Math.max(16, finiteArg(args, "sectionSizeMeters", state.sectionSize)));
+      state.lodLevels = Math.min(5, Math.max(1, Math.round(finiteArg(args, "lodLevels", state.lodLevels))));
+      const profile = str(args, "profile", state.profile);
+      if (profile === "natural" || profile === "flat") state.profile = profile;
+      // Keep the generic terrain footprint in step with the authored world size so
+      // bounds, selection, and export read the same extent the mesh actually covers.
+      data.size = vec3(state.worldSize, data.size.y, state.worldSize);
+
+      const node: TerrainNode = {
+        data,
+        id: uniqueSceneNodeId(scene, "node:terrain", new Set<string>()),
+        kind: "terrain",
+        name: str(args, "name", "Mesh Terrain"),
+        transform: makeTransform(vec3(finiteArg(args, "x", 0), finiteArg(args, "y", 0), finiteArg(args, "z", 0)))
+      };
+      const snapshot = structuredClone(node);
+      const command: Command = {
+        label: "Create mesh terrain",
+        execute(nextScene) {
+          nextScene.addNode(structuredClone(snapshot));
+        },
+        undo(nextScene) {
+          nextScene.removeNode(snapshot.id);
+        }
+      };
+      editor.execute(command);
+      context.onTerrainStateChanged?.(node.id);
+
+      return ok({
+        lodLevels: state.lodLevels,
+        materialChannels: state.materialSettings.channels.map((channel) => ({ id: channel.id, name: channel.name })),
+        mode: "mesh",
+        nodeId: node.id,
+        profile: state.profile,
+        sectionSizeMeters: state.sectionSize,
+        seed: state.seed,
+        worldSizeMeters: state.worldSize
+      });
+    }
+
+    case "terrain_sculpt_stroke": {
+      const mode = str(args, "mode");
+      if (!MESH_BRUSH_MODES.includes(mode as MeshBrushMode)) {
+        return fail(`mode must be one of ${MESH_BRUSH_MODES.join(", ")}.`);
+      }
+      const samples = terrainPathSamples(args);
+      if (samples.length === 0) return fail("path must contain at least one world-space point.");
+      const radius = finiteArg(args, "radiusMeters", 0);
+      if (!(radius > 0)) return fail("radiusMeters must be greater than 0.");
+      const strength = finiteArg(args, "strength", 0);
+      if (strength === 0) return fail("strength must be non-zero; it is the peak displacement in meters.");
+
+      const domain: MeshBrushDomain = str(args, "domain", "mesh") === "heightfield" ? "heightfield" : "mesh";
+      const first = samples[0]!;
+
+      return updateMeshTerrain(editor, context, optionalStr(args, "nodeId"), "Sculpt terrain", (state) => {
+        const stroke = createBrushStroke({
+          accumulate: bool(args, "accumulate"),
+          domain,
+          falloff: clamp01(finiteArg(args, "falloff", 0.5)),
+          mode: mode as MeshBrushMode,
+          noiseScale: optionalNum(args, "noiseScale"),
+          normal: first.normal,
+          point: first.point,
+          radius,
+          sampleWeight: first.weight,
+          sculptLayerId: optionalStr(args, "sculptLayerId"),
+          strength,
+          targetY: optionalNum(args, "targetY") ?? (mode === "flatten" ? first.point.y : undefined),
+          terraceStep: optionalNum(args, "terraceStepMeters")
+        });
+
+        for (const sample of samples.slice(1)) {
+          appendBrushPoint(stroke, sample.point, sample.normal, sample.weight);
+        }
+        appendTerrainModifier(state, stroke);
+
+        return {
+          bounds: stroke.bounds,
+          domain,
+          mode,
+          modifierId: stroke.id,
+          pointCount: stroke.points.length,
+          radiusMeters: radius,
+          strength
+        };
+      });
+    }
+
+    case "terrain_paint_weights": {
+      const channel = str(args, "channel");
+      if (!TERRAIN_PAINT_CHANNELS.includes(channel as TerrainPaintChannelId)) {
+        return fail(`channel must be one of ${TERRAIN_PAINT_CHANNELS.join(", ")}.`);
+      }
+      const samples = terrainPathSamples(args);
+      if (samples.length === 0) return fail("path must contain at least one world-space point.");
+      const radius = finiteArg(args, "radiusMeters", 0);
+      if (!(radius > 0)) return fail("radiusMeters must be greater than 0.");
+
+      const paintMode: TerrainPaintMode = str(args, "mode", "add") === "subtract" ? "subtract" : "add";
+      const first = samples[0]!;
+
+      return updateMeshTerrain(editor, context, optionalStr(args, "nodeId"), "Paint terrain weights", (state) => {
+        const stroke = createWeightPaintStroke({
+          channel: channel as TerrainPaintChannelId,
+          falloff: clamp01(finiteArg(args, "falloff", 0.7)),
+          mode: paintMode,
+          normal: first.normal,
+          point: first.point,
+          radius,
+          sampleWeight: first.weight,
+          strength: clamp01(finiteArg(args, "strength", 0.5))
+        });
+
+        for (const sample of samples.slice(1)) {
+          appendBrushPoint(stroke, sample.point, sample.normal, sample.weight);
+        }
+        appendTerrainModifier(state, stroke);
+
+        return {
+          bounds: stroke.bounds,
+          channel,
+          mode: paintMode,
+          modifierId: stroke.id,
+          pointCount: stroke.points.length,
+          radiusMeters: radius
+        };
+      });
+    }
+
+    case "terrain_carve_tunnel": {
+      const startPoint = vec3(finiteArg(args, "startX", 0), finiteArg(args, "startY", 0), finiteArg(args, "startZ", 0));
+      const endPoint = vec3(finiteArg(args, "endX", 0), finiteArg(args, "endY", 0), finiteArg(args, "endZ", 0));
+      const span = Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y, endPoint.z - startPoint.z);
+      if (span < 1e-3) return fail("The two tunnel portals must be at different world positions.");
+
+      const radius = Math.max(0.1, finiteArg(args, "radiusMeters", 8));
+      if (span < radius) {
+        return fail(`The portals are ${span.toFixed(1)} m apart but the bore radius is ${radius} m. Move the portals further apart or reduce radiusMeters.`);
+      }
+
+      return updateMeshTerrain(editor, context, optionalStr(args, "nodeId"), "Carve terrain tunnel", (state) => {
+        const tunnel = createTunnelModifier({
+          depth: optionalNum(args, "depthMeters"),
+          end: { ...endPoint, normal: terrainPortalNormal(args, "endNormal", endPoint, startPoint) },
+          noise: optionalNum(args, "noise"),
+          noiseScale: optionalNum(args, "noiseScale"),
+          radius,
+          start: { ...startPoint, normal: terrainPortalNormal(args, "startNormal", startPoint, endPoint) }
+        });
+        appendTerrainModifier(state, tunnel);
+
+        return {
+          bounds: tunnel.bounds,
+          depthMeters: tunnel.depth,
+          lengthMeters: span,
+          modifierId: tunnel.id,
+          portals: tunnel.portals,
+          radiusMeters: tunnel.radius
+        };
+      });
+    }
+
+    case "terrain_add_csg_volume": {
+      const entries = recordArray(args, "volumes");
+      if (entries.length === 0) return fail("volumes must contain at least one cutter volume.");
+      const volumes = entries.map((entry, index) => terrainCutterFromArgs(entry, index));
+      const operation = str(args, "operation", "subtract") === "add" ? "add" : "subtract";
+
+      return updateMeshTerrain(editor, context, optionalStr(args, "nodeId"), "Combine terrain volumes", (state) => {
+        const modifier = createBooleanVolumeModifier({ operation, volumes });
+        appendTerrainModifier(state, modifier);
+
+        return {
+          bounds: modifier.bounds,
+          modifierId: modifier.id,
+          operation,
+          volumeCount: modifier.volumes.length,
+          volumeKinds: modifier.volumes.map((volume) => volume.kind)
+        };
+      });
+    }
+
+    case "terrain_refine_density": {
+      const center = vec3(finiteArg(args, "x", 0), finiteArg(args, "y", 0), finiteArg(args, "z", 0));
+      const radius = finiteArg(args, "radiusMeters", 0);
+      if (!(radius > 0)) return fail("radiusMeters must be greater than 0.");
+      const targetEdgeLength = finiteArg(args, "targetEdgeLengthMeters", 0);
+      if (!(targetEdgeLength > 0)) return fail("targetEdgeLengthMeters must be greater than 0.");
+      if (targetEdgeLength >= radius) {
+        return fail("targetEdgeLengthMeters must be smaller than radiusMeters, otherwise the region gains no detail.");
+      }
+      const refineMode = str(args, "mode", "tessellate") === "remesh" ? "remesh" : "tessellate";
+
+      return updateMeshTerrain(editor, context, optionalStr(args, "nodeId"), "Refine terrain density", (state) => {
+        const modifier = refineMode === "remesh"
+          ? createRemeshModifier({ center, radius, targetEdgeLength })
+          : createTessellateModifier({ center, radius, targetEdgeLength });
+        appendTerrainModifier(state, modifier);
+
+        return {
+          bounds: modifier.bounds,
+          mode: refineMode,
+          modifierId: modifier.id,
+          radiusMeters: radius,
+          targetEdgeLengthMeters: targetEdgeLength
+        };
+      });
+    }
+
+    case "terrain_set_material_channels": {
+      const entries = recordArray(args, "channels");
+      if (entries.length === 0) return fail("channels must contain at least one channel entry.");
+      const invalid = entries.find((entry) => !TERRAIN_PAINT_CHANNELS.includes(str(entry, "id") as TerrainPaintChannelId));
+      if (invalid) return fail(`Each channel entry needs an id of ${TERRAIN_PAINT_CHANNELS.join(", ")}.`);
+
+      return updateMeshTerrain(editor, context, optionalStr(args, "nodeId"), "Set terrain material channels", (state) => {
+        const patches = new Map(entries.map((entry) => [str(entry, "id"), entry] as const));
+        const channels = state.materialSettings.channels.map((channel) => {
+          const patch = patches.get(channel.id);
+          if (!patch) return { ...channel };
+          return {
+            color: parseTerrainChannelColor(patch.color) ?? channel.color,
+            id: channel.id,
+            name: optionalStr(patch, "name") ?? channel.name,
+            roughness: optionalNum(patch, "roughness") === undefined
+              ? channel.roughness
+              : clamp01(num(patch, "roughness"))
+          };
+        }) as [TerrainMaterialChannel, TerrainMaterialChannel, TerrainMaterialChannel, TerrainMaterialChannel];
+
+        state.materialSettings = { channels };
+        return { channels };
+      });
+    }
+
+    // -- Forests -----------------------------------------------------------
+
+    case "create_forest_field": {
+      const preset = str(args, "preset", "mossy-old-growth");
+      if (!isForestPreset(preset)) {
+        return fail(`preset must be one of ${FOREST_PRESETS.map((entry) => entry.id).join(", ")}.`);
+      }
+
+      const fieldId = forestStore.createField(preset);
+      const patch: Partial<ForestField> = {};
+      const name = optionalStr(args, "name");
+      if (name) patch.name = name;
+      const closed = bool(args, "closed");
+      if (closed !== undefined) patch.closed = closed;
+      if (Object.keys(patch).length > 0) forestStore.patchField(fieldId, patch);
+
+      const points = forestPoints(args);
+      for (const point of points) forestStore.appendNode(fieldId, point);
+      if (points.length > 0) forestStore.finishDrawing();
+
+      // Growing is normally its own step, but a field created with its whole
+      // shape in one call has nothing left to wait for.
+      const shouldGrow = bool(args, "grow") ?? points.length >= 2;
+      if (shouldGrow && points.length >= 2) forestStore.requestGrow(fieldId);
+
+      const field = findForestField(fieldId);
+      return ok({
+        closed: field?.closed ?? true,
+        density: field?.density,
+        feather: field?.feather,
+        fieldId,
+        growRequested: shouldGrow && points.length >= 2,
+        name: field?.name,
+        points: points.length,
+        preset,
+        note:
+          points.length < 2
+            ? "Add at least two points with add_forest_points, then call grow_forest_field."
+            : undefined
+      });
+    }
+
+    case "add_forest_points": {
+      const field = resolveForestField(optionalStr(args, "fieldId"));
+      if (typeof field === "string") return field;
+
+      const points = forestPoints(args);
+      if (points.length === 0) return fail("points must contain at least one { x, z } entry.");
+      for (const point of points) forestStore.appendNode(field.id, point);
+      forestStore.finishDrawing();
+
+      const updated = findForestField(field.id);
+      return ok({
+        added: points.length,
+        fieldId: field.id,
+        readyToGrow: (updated?.nodes.length ?? 0) >= 2,
+        totalPoints: updated?.nodes.length ?? points.length
+      });
+    }
+
+    case "configure_forest_field": {
+      const field = resolveForestField(optionalStr(args, "fieldId"));
+      if (typeof field === "string") return field;
+
+      const patch: Partial<ForestField> = {};
+      const preset = optionalStr(args, "preset");
+      if (preset) {
+        if (!isForestPreset(preset)) {
+          return fail(`preset must be one of ${FOREST_PRESETS.map((entry) => entry.id).join(", ")}.`);
+        }
+        patch.preset = preset;
+      }
+      if (typeof args.density === "number") patch.density = Math.max(0.01, Math.min(4, args.density));
+      if (typeof args.feather === "number") patch.feather = Math.max(0, Math.min(400, args.feather));
+      if (typeof args.width === "number") patch.width = Math.max(1, Math.min(1000, args.width));
+      if (typeof args.seed === "number") patch.seed = Math.floor(args.seed);
+      const closed = bool(args, "closed");
+      if (closed !== undefined) patch.closed = closed;
+      const visible = bool(args, "visible");
+      if (visible !== undefined) patch.visible = visible;
+      const name = optionalStr(args, "name");
+      if (name) patch.name = name;
+
+      if (Object.keys(patch).length === 0) return fail("No settings were supplied to change.");
+      forestStore.patchField(field.id, patch);
+
+      const updated = findForestField(field.id);
+      return ok({
+        changed: Object.keys(patch),
+        closed: updated?.closed,
+        density: updated?.density,
+        feather: updated?.feather,
+        fieldId: field.id,
+        note: "The stand is marked dirty. Call grow_forest_field to rebuild it.",
+        preset: updated?.preset
+      });
+    }
+
+    case "grow_forest_field": {
+      const requestedId = optionalStr(args, "fieldId");
+      if (requestedId) {
+        const field = resolveForestField(requestedId);
+        if (typeof field === "string") return field;
+        if (field.nodes.length < 2) {
+          return fail(`Field ${field.id} has ${field.nodes.length} point(s); a stand needs at least two.`);
+        }
+      }
+      forestStore.requestGrow(requestedId);
+
+      // The viewport growth driver does the bake, one field per tick, so the
+      // stems are not counted here -- get_forest_state reports them once it has.
+      return ok({
+        fieldId: requestedId ?? "all dirty fields",
+        note: "Growing runs in the viewport. Call get_forest_state to read the stem count.",
+        requested: true
+      });
+    }
+
+    case "get_forest_state": {
+      const snapshot = forestStore.getSnapshot();
+      return ok({
+        fieldCount: snapshot.fields.length,
+        fields: snapshot.fields.map((field) => {
+          const bake = snapshot.bakes[field.id];
+          return {
+            closed: field.closed,
+            density: field.density,
+            feather: field.feather,
+            fieldId: field.id,
+            name: field.name,
+            needsGrow: field.dirty,
+            points: field.nodes.length,
+            preset: field.preset,
+            seed: field.seed,
+            visible: field.visible,
+            width: field.closed ? undefined : field.width,
+            ...(bake
+              ? {
+                  boulders: bake.rocks.length,
+                  growMs: Math.round(bake.elapsedMs),
+                  stems: bake.placements.length,
+                  treePrototypes: bake.prototypeIds
+                }
+              : {})
+          };
+        }),
+        status: snapshot.status
+      });
+    }
+
+    case "delete_forest_field": {
+      const field = resolveForestField(str(args, "fieldId"));
+      if (typeof field === "string") return field;
+      forestStore.removeField(field.id);
+      return ok({ deleted: true, fieldId: field.id, name: field.name });
+    }
+
+    // -- Combat VFX --------------------------------------------------------
+
+    case "cast_vfx_ability": {
+      const element = str(args, "element");
+      if (!(ELEMENTS as readonly string[]).includes(element)) {
+        return fail(`element must be one of ${ELEMENTS.join(", ")}.`);
+      }
+      const distance = Math.max(1, Math.min(400, finiteArg(args, "distance", 20)));
+      const outcome = requestVfxCast({
+        direction: { x: finiteArg(args, "directionX", 0), z: finiteArg(args, "directionZ", 1) },
+        distance,
+        element: element as ElementId,
+        origin: {
+          x: finiteArg(args, "x", 0),
+          y: finiteArg(args, "y", 0),
+          z: finiteArg(args, "z", 0)
+        }
+      });
+
+      if (!outcome.accepted) return fail(outcome.reason ?? "The cast was refused.");
+
+      const meta = ELEMENT_META[element as ElementId];
+      return ok({
+        cast: meta.label,
+        castShape: castShapeOf(element as ElementId),
+        distanceMeters: distance,
+        element,
+        // Deferred means no viewport is mounted yet. The cast is held rather
+        // than refused, and plays as soon as one appears.
+        pending: outcome.deferred,
+        note: outcome.deferred
+          ? "No viewport is running yet, so the cast is queued and will play as soon as one is. It expires after 10 seconds if none appears."
+          : "The cast plays once in the viewport and is not saved with the scene."
+      });
+    }
+
+    case "list_vfx_abilities": {
+      return ok({
+        abilities: ELEMENTS.map((element) => ({
+          castShape: castShapeOf(element),
+          element,
+          key: ELEMENT_META[element].key,
+          label: ELEMENT_META[element].label
+        })),
+        pendingCasts: pendingVfxCastCount(),
+        viewportReady: isVfxViewportReady()
+      });
+    }
+
+    case "get_terrain_state": {
+      const node = resolveMeshTerrainNode(scene, optionalStr(args, "nodeId"));
+      const state = meshTerrainState(node);
+      const limit = Math.max(1, Math.floor(optionalNum(args, "maxModifiers") ?? 60));
+      const visible = state.modifiers.slice(-limit);
+
+      return ok({
+        lodLevels: state.lodLevels,
+        materialChannels: state.materialSettings.channels,
+        modifierCount: state.modifiers.length,
+        modifiers: visible.map(summarizeTerrainModifier),
+        name: node.name,
+        nodeId: node.id,
+        origin: node.transform.position,
+        profile: state.profile,
+        sectionSizeMeters: state.sectionSize,
+        seed: state.seed,
+        truncated: state.modifiers.length > visible.length,
+        worldSizeMeters: state.worldSize
+      });
+    }
+
     // ── Placement ─────────────────────────────────────────────
     case "place_blockout_room": {
       const { command, groupId, nodeIds } = createPlaceBlockoutRoomCommand(scene, {
@@ -3587,6 +4399,73 @@ async function executeToolInner(editor: EditorCore, name: string, args: Args, co
       );
       editor.execute(command);
       return ok({ splitIds });
+    }
+
+    case "generate_game_html": {
+      const title = str(args, "title", "Generated Game");
+      const html = str(args, "html");
+      const files = fileBundle(args.files);
+      context.onGeneratedGame?.(title, html, files.length > 0 ? files : undefined);
+      return ok({ registered: true, title, hasHtml: Boolean(html.trim()), fileCount: files.length });
+    }
+
+    case "morphus_list_files":
+      return context.morphusListFiles
+        ? ok(context.morphusListFiles())
+        : fail("Morphus file listing is unavailable in this context.");
+
+    case "morphus_read_file": {
+      const path = str(args, "path");
+      const startLine = optionalNum(args, "startLine");
+      const endLine = optionalNum(args, "endLine");
+      const maxChars = optionalNum(args, "maxChars");
+      return context.morphusReadFile
+        ? ok(context.morphusReadFile(path, { endLine, maxChars, startLine }))
+        : fail("Morphus file reading is unavailable in this context.");
+    }
+
+    case "morphus_search_files": {
+      const query = str(args, "query");
+      const maxResults = optionalNum(args, "maxResults");
+      const pathGlob = optionalStr(args, "pathGlob");
+      const useRegex = bool(args, "useRegex");
+      const includeAssets = bool(args, "includeAssets");
+      return context.morphusSearchFiles
+        ? ok(context.morphusSearchFiles(query, { includeAssets, maxResults, pathGlob, useRegex }))
+        : fail("Morphus file search is unavailable in this context.");
+    }
+
+    case "morphus_write_file": {
+      const path = str(args, "path");
+      const content = str(args, "content");
+      return context.morphusWriteFile
+        ? ok(context.morphusWriteFile(path, content))
+        : fail("Morphus file writing is unavailable in this context.");
+    }
+
+    case "morphus_create_file": {
+      const path = str(args, "path");
+      const content = str(args, "content");
+      return context.morphusCreateFile
+        ? ok(context.morphusCreateFile(path, content))
+        : fail("Morphus file creation is unavailable in this context.");
+    }
+
+    case "morphus_request_delete_file": {
+      const path = str(args, "path");
+      const reason = str(args, "reason");
+      return context.morphusRequestDeleteFile
+        ? ok(context.morphusRequestDeleteFile(path, reason))
+        : fail("Morphus delete approval requests are unavailable in this context.");
+    }
+
+    case "morphus_request_rename_file": {
+      const fromPath = str(args, "fromPath");
+      const toPath = str(args, "toPath");
+      const reason = str(args, "reason");
+      return context.morphusRequestRenameFile
+        ? ok(context.morphusRequestRenameFile(fromPath, toPath, reason))
+        : fail("Morphus rename approval requests are unavailable in this context.");
     }
 
     default:

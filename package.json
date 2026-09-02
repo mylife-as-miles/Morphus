@@ -1,38 +1,22 @@
 {
-  "name": "@blud/editor",
+  "name": "morphus",
   "private": true,
   "version": "0.0.3",
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "predev": "node ../../scripts/generate-copilot-skills-manifest.mjs",
+    "predev": "node scripts/generate-copilot-skills-manifest.mjs",
     "dev": "vite",
-    "prebuild": "node ../../scripts/generate-copilot-skills-manifest.mjs",
+    "prebuild": "node scripts/generate-copilot-skills-manifest.mjs",
     "build": "tsc --noEmit && vite build && node scripts/create-sites-worker.mjs",
-    "pretypecheck": "node ../../scripts/generate-copilot-skills-manifest.mjs",
+    "pretypecheck": "node scripts/generate-copilot-skills-manifest.mjs",
     "typecheck": "tsc --noEmit",
-    "pretest": "node ../../scripts/generate-copilot-skills-manifest.mjs",
+    "pretest": "node scripts/generate-copilot-skills-manifest.mjs",
     "test": "tsx --test src/lib/copilot/skill-service.test.ts src/lib/procedural-world/procedural-world-config.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
-    "@blud/architecture": "*",
-    "@blud/dev-sync": "*",
-    "@blud/editor-core": "*",
-    "@blud/engine-config": "*",
-    "@blud/gameplay-runtime": "^0.1.11",
-    "@blud/geometry-kernel": "*",
-    "@blud/render-pipeline": "*",
-    "@blud/renderer-backend": "*",
-    "@blud/procedural-world": "*",
-    "@blud/runtime-build": "*",
-    "@blud/runtime-scripting": "*",
-    "@blud/shared": "*",
-    "@blud/skatepark": "*",
-    "@blud/three-runtime": "*",
-    "@blud/tool-system": "*",
-    "@blud/workers": "*",
     "@dagrejs/dagre": "^2.0.0",
     "@elevenlabs/elevenlabs-js": "^2.44.0",
     "@fal-ai/client": "^1.5.6",
@@ -75,5 +59,6 @@
     "next": "^16.2.6",
     "typescript": "^5.9.3",
     "vite": "^8.0.1"
-  }
+  },
+  "description": "Morphus - a browser-based level editor with mesh terrain, procedural forests and combat VFX."
 }

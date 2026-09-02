@@ -1,0 +1,37 @@
+{
+  "name": "@blud/procedural-world",
+  "version": "0.1.0",
+  "description": "LAAS-derived WebGPU procedural open-world runtime for Dream Studio.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": true,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE.LAAS"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup --config ../../scripts/tsup.package.config.mjs",
+    "typecheck": "tsc -p ../../apps/editor/tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@blud/shared": "*",
+    "three": "0.184.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.184.1",
+    "@webgpu/types": "^0.1.60"
+  }
+}

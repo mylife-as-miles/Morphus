@@ -40,6 +40,31 @@ function uid(): string {
 }
 
 const TAG = "[COPILOT]";
+const MORPHUS_READ_ONLY_NUDGE_STEPS = 4;
+const MORPHUS_MAX_CONSECUTIVE_READ_ONLY_STEPS = 8;
+
+function isMorphusReadOnlyToolBatch(toolCalls: CopilotToolCall[]) {
+  return toolCalls.length > 0 && toolCalls.every((call) =>
+    call.name === "morphus_list_files" ||
+    call.name === "morphus_read_file" ||
+    call.name === "morphus_search_files"
+  );
+}
+
+function hasMorphusReadBudgetExceeded(toolResults: CopilotToolResult[]) {
+  return toolResults.some((toolResult) => {
+    if (toolResult.name !== "morphus_read_file") {
+      return false;
+    }
+
+    try {
+      const parsed = JSON.parse(toolResult.result) as { budgetExceeded?: unknown };
+      return parsed.budgetExceeded === true;
+    } catch {
+      return false;
+    }
+  });
+}
 
 export async function runAgenticLoop(
   userPrompt: string,
@@ -68,6 +93,8 @@ export async function runAgenticLoop(
     }
   ];
   const activity: CopilotActivityItem[] = [...(config.existingActivity ?? [])];
+  let consecutiveMorphusReadOnlySteps = 0;
+  let morphusReadOnlyNudged = false;
 
   const session: CopilotSession = {
     messages,
@@ -370,6 +397,84 @@ export async function runAgenticLoop(
       iteration: stepNumber,
       tone: "info"
     });
+
+    const morphusReadOnlyBatch = config.modeLabel === "morphus" && isMorphusReadOnlyToolBatch(response.toolCalls);
+    consecutiveMorphusReadOnlySteps = morphusReadOnlyBatch ? consecutiveMorphusReadOnlySteps + 1 : 0;
+
+    if (config.modeLabel === "morphus" && hasMorphusReadBudgetExceeded(toolResults)) {
+      const content =
+        "I stopped Morphus because it reached the file-read budget for this run. Use the files already inspected and make a targeted write on the next request.";
+
+      messages.push({
+        id: uid(),
+        role: "assistant",
+        content,
+        timestamp: Date.now()
+      });
+      session.status = "idle";
+      session.messages = messages;
+      pushActivity({
+        kind: "status",
+        title: "Stopped excessive file reading",
+        detail: content,
+        iteration: stepNumber,
+        tone: "warning"
+      });
+      console.groupEnd();
+      emitUpdate();
+      return session;
+    }
+
+    if (
+      config.modeLabel === "morphus" &&
+      consecutiveMorphusReadOnlySteps >= MORPHUS_READ_ONLY_NUDGE_STEPS &&
+      !morphusReadOnlyNudged
+    ) {
+      const content =
+        "You have inspected enough project files for this run. Stop calling read/list tools now and make the smallest targeted `morphus_write_file` or `morphus_create_file` change that addresses the user's request.";
+
+      messages.push({
+        id: uid(),
+        role: "user",
+        content,
+        timestamp: Date.now()
+      });
+      morphusReadOnlyNudged = true;
+      pushActivity({
+        kind: "status",
+        title: "Prompted Morphus to edit",
+        detail: content,
+        iteration: stepNumber,
+        tone: "warning"
+      });
+    }
+
+    if (
+      config.modeLabel === "morphus" &&
+      consecutiveMorphusReadOnlySteps >= MORPHUS_MAX_CONSECUTIVE_READ_ONLY_STEPS
+    ) {
+      const content =
+        "I stopped Morphus because it kept reading files after being prompted to edit. Use the files already inspected and make a targeted write on the next request.";
+
+      messages.push({
+        id: uid(),
+        role: "assistant",
+        content,
+        timestamp: Date.now()
+      });
+      session.status = "idle";
+      session.messages = messages;
+      pushActivity({
+        kind: "status",
+        title: "Stopped excessive file reading",
+        detail: content,
+        iteration: stepNumber,
+        tone: "warning"
+      });
+      console.groupEnd();
+      emitUpdate();
+      return session;
+    }
 
     console.groupEnd();
     emitUpdate();

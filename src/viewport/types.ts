@@ -1,3 +1,4 @@
+import type { Command } from "@blud/editor-core";
 import type { EdgeBevelProfile } from "@blud/geometry-kernel";
 import type { DerivedRenderScene, ViewportState } from "@blud/render-pipeline";
 import type {
@@ -75,6 +76,15 @@ export type ViewportCanvasProps = {
   onClearSelection: () => void;
   onDropBlockout?: (kind: ViewportBlockoutDropKind, position: Vec3) => void;
   onCommitMeshTopology: (nodeId: string, mesh: EditableMesh) => void;
+  /**
+   * Pushes a terrain authoring command onto the editor's undo stack.
+   *
+   * Terrain is the one viewport gesture that produces a command directly rather
+   * than reporting a value for the shell to wrap, because a stroke is a single
+   * undo entry built up over many pointer events -- only the sculpt session
+   * knows when it is finished.
+   */
+  onExecuteTerrainCommand?: (command: Command) => void;
   onFocusNode: (nodeId: string) => void;
   onPlaceAsset: (position: { x: number; y: number; z: number }) => void;
   onPlaceAiModelPlaceholder: (position: Vec3) => void;

@@ -40,6 +40,7 @@ import {
   type GeometryNode,
   isBrushNode,
   isMeshNode,
+  isMeshTerrainNode,
   isProceduralWorldNode,
   lengthVec3,
   normalizeVec3,
@@ -78,6 +79,16 @@ import { NodeTransformGroup } from "@/viewport/components/NodeTransformGroup";
 import { ObjectTransformGizmo } from "@/viewport/components/ObjectTransformGizmo";
 import { PreviewNpcDialogueOverlay } from "@/viewport/components/PreviewNpcDialogueOverlay";
 import { ScenePreview } from "@/viewport/components/ScenePreview";
+import { MeshTerrainObject } from "@/viewport/components/MeshTerrainObject";
+import { ForestLayer } from "@/viewport/components/ForestLayer";
+import { VfxLayer } from "@/viewport/components/VfxLayer";
+import { useForestGrowth } from "@/viewport/hooks/useForestGrowth";
+import { forestStore, useForestSnapshot } from "@/state/forest-store";
+import { isForestToolId } from "@blud/tool-system";
+import { TerrainSculptOverlay } from "@/viewport/components/TerrainSculptOverlay";
+import { useTerrainSculpt } from "@/viewport/hooks/useTerrainSculpt";
+import { terrainToolFor, toTerrainSculptSettings } from "@/viewport/hooks/terrain-sculpt-settings";
+import { uiStore } from "@/state/ui-store";
 import { ProceduralWorldBridge, type ProceduralWorldBridgeStatus } from "@/viewport/components/ProceduralWorldBridge";
 import {
   createBrushCreateBasis,
@@ -458,6 +469,7 @@ export function ViewportCanvas({
   onClearSelection,
   onDropBlockout,
   onCommitMeshTopology,
+  onExecuteTerrainCommand,
   onFocusNode,
   onPlaceAsset,
   onPlaceAiModelPlaceholder,
@@ -515,6 +527,21 @@ export function ViewportCanvas({
   const glConfig = useRendererGlConfig();
   const proceduralWorldNode = nodes.find(isProceduralWorldNode);
   const proceduralWorldActive = Boolean(proceduralWorldNode?.data.enabled);
+  // At most one mesh terrain per scene, matching how the procedural world node
+  // is treated: it is the ground the rest of the scene sits on, not a prop.
+  const meshTerrainNode = nodes.find(isMeshTerrainNode);
+
+  const forest = useForestSnapshot();
+  const forestToolActive = isForestToolId(activeToolId);
+  // A stand is hidden while its spline is being dragged: regrowing on every
+  // pointer move is what the store's `interacting` flag exists to prevent, and
+  // drawing a stale stand under a moving outline reads as lag.
+  const forestBakes = useMemo(
+    () => forest.fields.filter((field) => field.visible)
+      .map((field) => forest.bakes[field.id])
+      .filter((bake): bake is NonNullable<typeof bake> => Boolean(bake)),
+    [forest.bakes, forest.fields]
+  );
 
   const [brushEditHandleIds, setBrushEditHandleIds] = useState<string[]>([]);
   const [brushCreateState, setBrushCreateState] = useState<BrushCreateState | null>(null);
@@ -537,6 +564,24 @@ export function ViewportCanvas({
   const snapSize = resolveViewportSnapSize(viewport);
   const previewActive = physicsPlayback !== "stopped";
   const editorInteractionEnabled = physicsPlayback === "stopped" || (physicsPlayback === "paused" && !previewPossessed);
+
+  useForestGrowth(meshTerrainNode, editorInteractionEnabled);
+
+  const terrainTool = terrainToolFor(activeToolId);
+  const terrainSculpt = useTerrainSculpt({
+    enabled: editorInteractionEnabled && Boolean(terrainTool) && Boolean(meshTerrainNode),
+    execute: (command) => onExecuteTerrainCommand?.(command),
+    getCamera: () => cameraRef.current,
+    getMeshTerrain: () => meshTerrainNode?.data.meshTerrain,
+    getTerrainObjects: () => {
+      const object = meshTerrainNode ? meshObjectsRef.current.get(meshTerrainNode.id) : undefined;
+      return object ? [object] : [];
+    },
+    getViewportBounds: () => viewportRootRef.current?.getBoundingClientRect(),
+    nodeId: meshTerrainNode?.id,
+    raycaster: raycasterRef.current,
+    settings: toTerrainSculptSettings(terrainTool ?? "sculpt", uiStore.terrainBrush)
+  });
   const [previewMouseCaptured, setPreviewMouseCaptured] = useState(false);
   const [proceduralWorldStatus, setProceduralWorldStatus] = useState<ProceduralWorldBridgeStatus>({ kind: "inactive" });
   const [meshEditSelectionIds, setMeshEditSelectionIds] = useState<string[]>([]);
@@ -3091,6 +3136,28 @@ export function ViewportCanvas({
       return;
     }
 
+    // forest-field click: lay a spline control point where the ground was hit.
+    // Drawing and editing are one tool, so this only appends while the field is
+    // in drawing mode; once finished, clicks fall through to selection.
+    if (forestToolActive && forest.drawing && forest.selectedFieldId && event.button === 0) {
+      const hit = terrainSculpt.pickTerrainSurface(event.clientX, event.clientY);
+      if (hit) {
+        forestStore.appendNode(forest.selectedFieldId, { x: hit.point.x, z: hit.point.z });
+        selectionClickOriginRef.current = null;
+        marqueeOriginRef.current = null;
+        return;
+      }
+    }
+
+    // A terrain gesture owns the drag outright: capture so a stroke that leaves
+    // the canvas still ends, and skip selection and orbit for the duration.
+    if (terrainTool && terrainSculpt.handlePointerDown(event)) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      selectionClickOriginRef.current = null;
+      marqueeOriginRef.current = null;
+      return;
+    }
+
     selectionClickOriginRef.current =
       event.button === 0 && !event.shiftKey
         ? new Vector2(event.clientX - bounds.left, event.clientY - bounds.top)
@@ -3147,6 +3214,13 @@ export function ViewportCanvas({
 
     const bounds = event.currentTarget.getBoundingClientRect();
     pointerPositionRef.current = new Vector2(event.clientX - bounds.left, event.clientY - bounds.top);
+
+    if (terrainTool) {
+      terrainSculpt.handlePointerMove(event);
+      if (terrainSculpt.isStroking) {
+        return;
+      }
+    }
 
     if (extrudeState) {
       queuePreviewUpdate("extrude", event.clientX, event.clientY, bounds);
@@ -3259,6 +3333,14 @@ export function ViewportCanvas({
 
   const handlePointerUp: PointerEventHandler<HTMLDivElement> = (event) => {
     if (!editorInteractionEnabled) {
+      return;
+    }
+
+    if (terrainTool && terrainSculpt.isStroking) {
+      terrainSculpt.handlePointerUp(event);
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
       return;
     }
 
@@ -3652,6 +3734,24 @@ export function ViewportCanvas({
             position={[renderScene.boundsCenter.x, renderScene.boundsCenter.y - 0.01, renderScene.boundsCenter.z]}
           />
         ) : null}
+        {terrainTool ? (
+          <TerrainSculptOverlay
+            session={terrainSculpt}
+            tone={terrainTool === "tunnel" || terrainTool === "dig" ? "subtractive" : "neutral"}
+          />
+        ) : null}
+        <ForestLayer bakes={forestBakes} visible={!forest.interacting} />
+        <VfxLayer enabled={isActiveViewport} />
+        <MeshTerrainObject
+          hovered={false}
+          interactive={editorInteractionEnabled}
+          node={meshTerrainNode}
+          onFocusNode={onFocusNode}
+          onObjectChange={handleMeshObjectChange}
+          onSelectNode={(nodeId) => onSelectNodes([nodeId])}
+          renderMode={renderMode}
+          selected={Boolean(meshTerrainNode && selectedNodeIds.includes(meshTerrainNode.id))}
+        />
         <ProceduralWorldBridge node={proceduralWorldNode} onStatusChange={setProceduralWorldStatus} />
         <EditorCameraRig
           controlsEnabled={cameraControlsEnabled}

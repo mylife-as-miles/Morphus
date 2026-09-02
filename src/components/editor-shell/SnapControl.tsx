@@ -9,17 +9,13 @@ import { formatSnapValue } from "@/viewport/utils/snap";
 
 export function SnapControl({
   currentSnapSize,
-  gridInfinite,
   gridSnapValues,
-  onSetGridInfinite,
   onSetSnapEnabled,
   onSetSnapSize,
   snapEnabled
 }: {
   currentSnapSize: GridSnapValue;
-  gridInfinite: boolean;
   gridSnapValues: readonly GridSnapValue[];
-  onSetGridInfinite: (infinite: boolean) => void;
   onSetSnapEnabled: (enabled: boolean) => void;
   onSetSnapSize: (snapSize: GridSnapValue) => void;
   snapEnabled: boolean;
@@ -50,28 +46,6 @@ export function SnapControl({
         />
         <TooltipContent>
           <TooltipLabel label="Toggle snapping" />
-        </TooltipContent>
-      </Tooltip>
-      <div className="editor-toolbar-divider h-5" />
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              aria-pressed={gridInfinite}
-              className={cn(
-                "editor-toolbar-button h-8 rounded-[10px] px-2.5 text-[10px] font-semibold tracking-[0.16em] uppercase hover:translate-y-0 active:scale-100",
-                gridInfinite ? "editor-toolbar-button-active text-[#fff0cb]" : "text-foreground/48"
-              )}
-              onClick={() => onSetGridInfinite(!gridInfinite)}
-              size="sm"
-              variant="ghost"
-            >
-              ∞
-            </Button>
-          }
-        />
-        <TooltipContent>
-          <TooltipLabel label="Infinite viewport" />
         </TooltipContent>
       </Tooltip>
       <div className="editor-toolbar-divider h-5" />
@@ -124,23 +98,6 @@ export function SnapControl({
                   {formatSnapValue(snapValue)}
                 </Button>
               ))}
-            </div>
-            <div className="border-t border-white/8 pt-2">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-[10px] font-medium tracking-[0.18em] text-[#f6d07d]/62 uppercase">Infinite Viewport</span>
-                <Button
-                  aria-pressed={gridInfinite}
-                  className={cn(
-                    "editor-toolbar-button h-6 min-w-10 rounded-lg px-2 text-[10px] font-semibold tracking-[0.14em] uppercase hover:translate-y-0 active:scale-100",
-                    gridInfinite ? "editor-toolbar-button-active text-[#fff0cb]" : "text-foreground/48"
-                  )}
-                  onClick={() => onSetGridInfinite(!gridInfinite)}
-                  size="xs"
-                  variant="ghost"
-                >
-                  {gridInfinite ? "On" : "Off"}
-                </Button>
-              </div>
             </div>
           </div>
         </PopoverContent>

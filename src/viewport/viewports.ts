@@ -1,6 +1,8 @@
 import {
   createOrthographicViewportState,
   createViewportState,
+  type OrthographicViewportState,
+  type PerspectiveViewportState,
   type ViewportState
 } from "@blud/render-pipeline";
 import { addVec3, subVec3, vec3, type Vec3 } from "@blud/shared";
@@ -127,32 +129,77 @@ export function resolveVisibleViewportPaneIds(viewModeId: ViewModeId): ViewportP
   return ["perspective", "top", "front", "side"];
 }
 
+/**
+ * How far the editor lets a camera pull back, in metres.
+ *
+ * Terrain is authored at kilometre scale -- a default mesh terrain is a 4 km
+ * square -- and the shipped defaults (5 km orbit ceiling, 10 km perspective far
+ * plane, a 500 m orthographic far plane) clipped the world away long before the
+ * whole thing was on screen. The infinite construction grid already draws out
+ * to 16 km, so these are sized to reach past it.
+ */
+const PERSPECTIVE_FAR = 200_000;
+const PERSPECTIVE_NEAR = 0.25;
+const PERSPECTIVE_MIN_DISTANCE = 0.05;
+const PERSPECTIVE_MAX_DISTANCE = 150_000;
+const ORTHOGRAPHIC_FAR = 200_000;
+const ORTHOGRAPHIC_NEAR = 0.1;
+const ORTHOGRAPHIC_MIN_ZOOM = 0.005;
+const ORTHOGRAPHIC_MAX_ZOOM = 4_000;
+
+/**
+ * The infinite grid is not a mode any more.
+ *
+ * It used to be a toggle that defaulted off, which meant every new session
+ * started inside a 256 m box with perimeter walls. Nothing about that helped
+ * terrain work, so the grid is simply always infinite and the switch is gone.
+ */
+function withPerspectiveLimits(viewport: PerspectiveViewportState): PerspectiveViewportState {
+  viewport.grid.infinite = true;
+  viewport.camera.near = PERSPECTIVE_NEAR;
+  viewport.camera.far = PERSPECTIVE_FAR;
+  viewport.camera.minDistance = PERSPECTIVE_MIN_DISTANCE;
+  viewport.camera.maxDistance = PERSPECTIVE_MAX_DISTANCE;
+
+  return viewport;
+}
+
+function withOrthographicLimits(viewport: OrthographicViewportState): OrthographicViewportState {
+  viewport.grid.infinite = true;
+  viewport.camera.near = ORTHOGRAPHIC_NEAR;
+  viewport.camera.far = ORTHOGRAPHIC_FAR;
+  viewport.camera.minZoom = ORTHOGRAPHIC_MIN_ZOOM;
+  viewport.camera.maxZoom = ORTHOGRAPHIC_MAX_ZOOM;
+
+  return viewport;
+}
+
 export function createEditorViewports() {
   return {
-    perspective: createViewportState(),
-    top: createOrthographicViewportState(
-      {
+    perspective: withPerspectiveLimits(createViewportState()),
+    top: withOrthographicLimits(
+      createOrthographicViewportState({
         position: vec3(0, 96, 0),
         target: vec3(0, 0, 0),
         up: vec3(0, 0, -1),
         zoom: 10
-      }
+      })
     ),
-    front: createOrthographicViewportState(
-      {
+    front: withOrthographicLimits(
+      createOrthographicViewportState({
         position: vec3(0, 40, 96),
         target: vec3(0, 40, 0),
         up: vec3(0, 1, 0),
         zoom: 9
-      }
+      })
     ),
-    side: createOrthographicViewportState(
-      {
+    side: withOrthographicLimits(
+      createOrthographicViewportState({
         position: vec3(96, 40, 0),
         target: vec3(0, 40, 0),
         up: vec3(0, 1, 0),
         zoom: 9
-      }
+      })
     )
   } satisfies Record<ViewportPaneId, ViewportState>;
 }

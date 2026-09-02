@@ -16,12 +16,15 @@ import type {
   Vec2,
   Vec3
 } from "@blud/shared";
+import { isMeshTerrainNode } from "@blud/shared";
 import type { PrimitiveNodeData, PrimitiveShape, ProceduralWorldNodeData, SkateparkElementType } from "@blud/shared";
 import type { ToolId } from "@blud/tool-system";
 import type { FloorPresetId } from "@/lib/floor-presets";
 import type { WorkerJob } from "@blud/workers";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { CopilotImageAttachment, CopilotSession } from "@/lib/copilot/types";
+import type { AiAssistantMode } from "@/lib/copilot/types";
+import type { MorphusFileRecord } from "@/lib/copilot/morphus-memory";
 import { buildGameBlobUrl } from "@/lib/game-html";
 import { AiModelPromptBar } from "@/components/editor-shell/AiModelPromptBar";
 import { EditorMenuBar } from "@/components/editor-shell/EditorMenuBar";
@@ -44,6 +47,9 @@ import { MessageSquareText, PanelsTopLeft, Wrench } from "lucide-react";
 
 const CopilotPanel = lazy(() =>
   import("@/components/editor-shell/CopilotPanel").then((module) => ({ default: module.CopilotPanel }))
+);
+const MorphusWorkspace = lazy(() =>
+  import("@/components/editor-shell/MorphusWorkspace").then((module) => ({ default: module.MorphusWorkspace }))
 );
 const GameBridgePanel = lazy(() =>
   import("@/components/editor-shell/GameBridgePanel").then((module) => ({ default: module.GameBridgePanel }))
@@ -77,7 +83,23 @@ type EditorShellProps = {
     refreshConfigured: () => void;
     latestGame: { title: string; html: string } | null;
     clearLatestGame: () => void;
+    files?: MorphusFileRecord[];
+    saveFile?: (path: string, content: string) => void;
   };
+  morphus: {
+    session: CopilotSession;
+    sendMessage: (prompt: string, images?: CopilotImageAttachment[]) => void;
+    abort: () => void;
+    clearHistory: () => void;
+    isConfigured: boolean;
+    refreshConfigured: () => void;
+    latestGame: { title: string; html: string } | null;
+    clearLatestGame: () => void;
+    files: MorphusFileRecord[];
+    saveFile: (path: string, content: string) => void;
+  };
+  aiAssistantMode: AiAssistantMode;
+  aiModePickerOpen: boolean;
   copilotPanelOpen: boolean;
   gameConnectionControl?: ReactNode;
   logicViewerOpen: boolean;
@@ -122,6 +144,7 @@ type EditorShellProps = {
   onClipSelection: (axis: TransformAxis) => void;
   onCommitMeshTopology: (nodeId: string, mesh: EditableMesh) => void;
   onCreateBrush: () => void;
+  onCreateMeshTerrain: () => void;
   onCreateProceduralWorld: () => void;
   onDeleteSelection: () => void;
   onDuplicateSelection: () => void;
@@ -185,14 +208,15 @@ type EditorShellProps = {
   onSetSculptBrushRadius: (value: number) => void;
   onSetSculptBrushStrength: (value: number) => void;
   onSetRightPanel: (panel: RightPanelId | null) => void;
-  onSetGridInfinite: (infinite: boolean) => void;
   onSetSnapEnabled: (enabled: boolean) => void;
   onSetSnapSize: (snapSize: GridSnapValue) => void;
   onStopPhysics: () => void;
   onTogglePreviewPossession: () => void;
   onSetTransformMode: (mode: "rotate" | "scale" | "translate") => void;
   onSetToolId: (toolId: ToolId) => void;
+  onCloseAiModePicker: () => void;
   onOpenAiLauncher: () => void;
+  onSelectAiAssistantMode: (mode: AiAssistantMode) => void;
   onToggleCopilot: () => void;
   onToggleLogicViewer: () => void;
   onToggleTools: () => void;
@@ -240,6 +264,9 @@ export function EditorShell({
   aiModelPlacementActive,
   aiModelPlacementArmed,
   copilot,
+  morphus,
+  aiAssistantMode,
+  aiModePickerOpen,
   copilotPanelOpen,
   gameConnectionControl,
   logicViewerOpen,
@@ -273,6 +300,7 @@ export function EditorShell({
   onClipSelection,
   onCommitMeshTopology,
   onCreateBrush,
+  onCreateMeshTerrain,
   onCreateProceduralWorld,
   onDeleteSelection,
   onDuplicateSelection,
@@ -336,14 +364,15 @@ export function EditorShell({
   onSetSculptBrushRadius,
   onSetSculptBrushStrength,
   onSetRightPanel,
-  onSetGridInfinite,
   onSetSnapEnabled,
   onSetSnapSize,
   onStopPhysics,
   onTogglePreviewPossession,
   onSetTransformMode,
   onSetToolId,
+  onCloseAiModePicker,
   onOpenAiLauncher,
+  onSelectAiAssistantMode,
   onToggleCopilot,
   onToggleLogicViewer,
   onToggleTools,
@@ -394,13 +423,13 @@ export function EditorShell({
   const gameViewUrlRef = useRef<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  const handlePlayInViewport = useCallback((game = copilot.latestGame) => {
+  const handlePlayInViewport = useCallback((game = aiAssistantMode === "morphus" ? morphus.latestGame : copilot.latestGame) => {
     if (!game) return;
     if (gameViewUrlRef.current) URL.revokeObjectURL(gameViewUrlRef.current);
     const url = buildGameBlobUrl(game.html);
     gameViewUrlRef.current = url;
     setGameViewUrl(url);
-  }, [copilot.latestGame]);
+  }, [aiAssistantMode, copilot.latestGame, morphus.latestGame]);
 
   const handleExitGameView = useCallback(() => {
     setGameViewUrl(null);
@@ -413,10 +442,10 @@ export function EditorShell({
   }, []);
 
   useEffect(() => {
-    if (!copilot.latestGame) {
+    if (!copilot.latestGame && !morphus.latestGame) {
       handleExitGameView();
     }
-  }, [copilot.latestGame, handleExitGameView]);
+  }, [copilot.latestGame, handleExitGameView, morphus.latestGame]);
 
   const selectionEnabled = physicsPlayback === "stopped" || (physicsPlayback === "paused" && !previewPossessed);
   const nodes = Array.from(editor.scene.nodes.values());
@@ -436,6 +465,7 @@ export function EditorShell({
     selectedNode?.kind === "brush" || selectedNode?.kind === "mesh" || selectedNode?.kind === "primitive";
   const selectedIsMesh = selectedNode?.kind === "mesh";
   const activeViewport = viewports[activeViewportId];
+  const morphusActive = copilotPanelOpen && aiAssistantMode === "morphus";
 
   const renderViewportPane = (viewportId: ViewportPaneId) => {
     const definition = viewportPaneDefinitions[viewportId];
@@ -468,6 +498,7 @@ export function EditorShell({
           onClearSelection={onClearSelection}
           onDropBlockout={onDropBlockout}
           onCommitMeshTopology={onCommitMeshTopology}
+          onExecuteTerrainCommand={(command) => editor.execute(command)}
           onFocusNode={onFocusNode}
           onPlaceAsset={onPlaceAsset}
           onPlaceAiModelPlaceholder={onPlaceAiModelPlaceholder}
@@ -517,6 +548,7 @@ export function EditorShell({
 
   return (
     <div className="editor-shell flex flex-col text-foreground" style={{ height: "100dvh" }}>
+      {!morphusActive && (
       <header className="relative z-20 shrink-0 px-2 pt-2 sm:px-3 sm:pt-3">
         <div className="editor-toolbar-shell rounded-[20px] sm:rounded-[22px]">
           <EditorMenuBar
@@ -570,23 +602,46 @@ export function EditorShell({
           />
         </div>
       </header>
+      )}
 
       <main className={cn(
         "relative flex min-h-0 flex-1 gap-2 px-2 pb-16 sm:gap-3 sm:px-3 sm:pb-3",
-        "pt-1.5 sm:pt-2"
+        morphusActive ? "pt-2 sm:pt-3" : "pt-1.5 sm:pt-2"
       )}>
+        {morphusActive ? (
+          <div className="relative min-h-0 flex-1">
+            <Suspense fallback={<CopilotPanelFallback label="Loading Morphus" />}>
+              <MorphusWorkspace
+                files={morphus.files}
+                isConfigured={morphus.isConfigured}
+                latestGame={morphus.latestGame}
+                onAbort={morphus.abort}
+                onClearGame={morphus.clearLatestGame}
+                onClearHistory={morphus.clearHistory}
+                onClose={onToggleCopilot}
+                onPlayInViewport={handlePlayInViewport}
+                onSaveFile={morphus.saveFile}
+                onSendMessage={morphus.sendMessage}
+                onSettingsChanged={morphus.refreshConfigured}
+                session={morphus.session}
+              />
+            </Suspense>
+          </div>
+        ) : (
+        <>
         {toolsPanelOpen && (
           <div className={cn(
             "w-64 shrink-0 sm:w-80 lg:w-[22rem]",
             mobileEditorTab === "tools" ? "block" : "hidden lg:block"
           )}>
             <ToolsPanel
+              hasMeshTerrain={nodes.some(isMeshTerrainNode)}
+              onCreateMeshTerrain={onCreateMeshTerrain}
               activeBrushShape={activeBrushShape}
               activeRightPanel={activeRightPanel}
               aiModelPlacementActive={aiModelPlacementActive || aiModelPlacementArmed}
               activeToolId={activeToolId}
               currentSnapSize={activeViewport.grid.snapSize}
-              gridInfinite={activeViewport.grid.infinite}
               gridSnapValues={gridSnapValues}
               meshEditMode={meshEditMode}
               onClose={onToggleTools}
@@ -618,7 +673,6 @@ export function EditorShell({
               onSetSculptBrushStrength={onSetSculptBrushStrength}
               onSetSculptBrushType={onSetSculptBrushType}
               onSetSculptSymmetryX={onSetSculptSymmetryX}
-              onSetGridInfinite={onSetGridInfinite}
               onSetSnapEnabled={onSetSnapEnabled}
               onSetSnapSize={onSetSnapSize}
               onSetToolId={onSetToolId}
@@ -785,7 +839,7 @@ export function EditorShell({
         )}
         </div>
 
-        {copilotPanelOpen && (
+        {copilotPanelOpen && aiAssistantMode === "copilot" && (
           <div className={cn(
             "w-64 shrink-0 sm:w-80 lg:w-[22rem]",
             mobileEditorTab === "chat" ? "block" : "hidden lg:block"
@@ -807,13 +861,24 @@ export function EditorShell({
             </Suspense>
           </div>
         )}
+        </>
+        )}
       </main>
 
-      <nav className="fixed inset-x-2 bottom-2 z-30 flex items-center justify-between rounded-2xl border border-white/10 bg-[#111722]/92 p-1.5 shadow-xl backdrop-blur-lg lg:hidden">
-        <MobileEditorTabButton active={mobileEditorTab === "tools"} icon={<Wrench className="size-4" />} label="Tools" onClick={() => setMobileEditorTab("tools")} />
-        <MobileEditorTabButton active={mobileEditorTab === "viewport"} icon={<PanelsTopLeft className="size-4" />} label="Viewport" onClick={() => setMobileEditorTab("viewport")} />
-        <MobileEditorTabButton active={mobileEditorTab === "chat"} icon={<MessageSquareText className="size-4" />} label="Chat" onClick={() => setMobileEditorTab("chat")} />
-      </nav>
+      {!morphusActive && (
+        <nav className="fixed inset-x-2 bottom-2 z-30 flex items-center justify-between rounded-2xl border border-white/10 bg-[#111722]/92 p-1.5 shadow-xl backdrop-blur-lg lg:hidden">
+          <MobileEditorTabButton active={mobileEditorTab === "tools"} icon={<Wrench className="size-4" />} label="Tools" onClick={() => setMobileEditorTab("tools")} />
+          <MobileEditorTabButton active={mobileEditorTab === "viewport"} icon={<PanelsTopLeft className="size-4" />} label="Viewport" onClick={() => setMobileEditorTab("viewport")} />
+          <MobileEditorTabButton active={mobileEditorTab === "chat"} icon={<MessageSquareText className="size-4" />} label="Chat" onClick={() => setMobileEditorTab("chat")} />
+        </nav>
+      )}
+
+      {aiModePickerOpen && (
+        <AiModePicker
+          onClose={onCloseAiModePicker}
+          onSelect={onSelectAiAssistantMode}
+        />
+      )}
     </div>
   );
 }
@@ -973,6 +1038,58 @@ function CopilotPanelFallback({ label = "Loading Copilot" }: { label?: string })
     <div className="glass-panel glass-panel-strong flex h-full items-center justify-center rounded-[32px] px-4">
       <div className="text-[11px] font-medium tracking-[0.18em] text-foreground/48 uppercase">
         {label}
+      </div>
+    </div>
+  );
+}
+
+function AiModePicker({
+  onClose,
+  onSelect
+}: {
+  onClose: () => void;
+  onSelect: (mode: AiAssistantMode) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/28 px-4 pt-24 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="editor-toolbar-shell w-full max-w-xl rounded-[24px] p-3 shadow-[0_28px_80px_rgba(0,0,0,0.42)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="px-2 pb-3 pt-1">
+          <div className="text-[11px] font-semibold tracking-[0.22em] text-white/86 uppercase">
+            Choose AI Workspace
+          </div>
+          <div className="mt-1 text-[12px] text-white/42">
+            Copilot edits the viewport. Morphus creates standalone HTML games.
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button
+            className="editor-toolbar-segment rounded-[18px] p-4 text-left transition-colors hover:border-emerald-300/22"
+            onClick={() => onSelect("copilot")}
+            type="button"
+          >
+            <div className="text-[12px] font-semibold tracking-[0.16em] text-emerald-100 uppercase">
+              Copilot
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-white/48">
+              Uses Dream Studio viewport tools to inspect, place, edit, and refine scene content.
+            </p>
+          </button>
+          <button
+            className="editor-toolbar-segment rounded-[18px] p-4 text-left transition-colors hover:border-[#f6d07d]/28"
+            onClick={() => onSelect("morphus")}
+            type="button"
+          >
+            <div className="text-[12px] font-semibold tracking-[0.16em] text-[#f6d07d] uppercase">
+              Morphus
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-white/48">
+              Generates playable HTML and JavaScript games with a saved chat and file workspace.
+            </p>
+          </button>
+        </div>
       </div>
     </div>
   );

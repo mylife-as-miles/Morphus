@@ -1,0 +1,21 @@
+{
+  "name": "@blud/forest",
+  "version": "0.1.0",
+  "description": "Procedural forests: spline-defined stand fields, species presets, and a self-contained tree geometry generator.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist", "README.md"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  },
+  "scripts": {
+    "build": "tsup --config ../../scripts/tsup.package.config.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": { "access": "public" },
+  "dependencies": { "@blud/shared": "*" },
+  "peerDependencies": { "three": ">=0.184.0" }
+}

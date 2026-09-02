@@ -3,7 +3,7 @@ import test from "node:test";
 import { bundledCopilotSkills } from "@/generated/copilot-skills-manifest";
 import { createBudgetedCopilotSkillToolContext } from "@/app/hooks/useCopilot";
 import { findCopilotSkills } from "../../../server/copilot-skills-service";
-import { EDITOR_COPILOT_TOOL_DECLARATIONS } from "./tool-declarations";
+import { EDITOR_COPILOT_TOOL_DECLARATIONS, GAME_TOOL_DECLARATIONS } from "./tool-declarations";
 import {
   listCopilotSkillReferences,
   matchCopilotSkills,
@@ -127,9 +127,11 @@ test("reference reads cache duplicate ranges and cap unique documents per run", 
 
 test("only editor Copilot receives reference tools and active skill content", () => {
   const editorToolNames = new Set(EDITOR_COPILOT_TOOL_DECLARATIONS.map((tool) => tool.name));
+  const gameToolNames = new Set(GAME_TOOL_DECLARATIONS.map((tool) => tool.name));
   assert.equal(editorToolNames.has("list_copilot_skill_references"), true);
   assert.equal(editorToolNames.has("read_copilot_skill_reference"), true);
   assert.equal(editorToolNames.has("search_copilot_skill_references"), true);
+  assert.equal(gameToolNames.has("read_copilot_skill_reference"), false);
 
   const context = matchCopilotSkills("Create an open-world RPG region.", catalog);
   const prompt = appendSkillContextToPrompt("base prompt", context);
