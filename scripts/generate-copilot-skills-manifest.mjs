@@ -5,10 +5,10 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "..");
 const skillsRoot = path.join(repositoryRoot, ".agents", "skills");
+// This repo is the editor, so the manifest lands beside the rest of its source
+// rather than under an apps/ directory that no longer exists here.
 const outputPath = path.join(
   repositoryRoot,
-  "apps",
-  "editor",
   "src",
   "generated",
   "copilot-skills-manifest.ts"
