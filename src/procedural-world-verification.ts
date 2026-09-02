@@ -267,7 +267,7 @@ type BrowserGpu = {
   } | null>;
 };
 
-function buildRequiredLimits(limits: Record<string, unknown>): Record<string, number> {
+function buildRequiredLimits(limits: GPUSupportedLimits): Record<string, number> {
   const desired: Record<string, number> = {
     maxBufferSize: 1 << 30,
     maxStorageBufferBindingSize: 1 << 30,
@@ -276,7 +276,7 @@ function buildRequiredLimits(limits: Record<string, unknown>): Record<string, nu
   };
   const required: Record<string, number> = {};
   for (const [name, value] of Object.entries(desired)) {
-    const supported = limits[name];
+    const supported = (limits as unknown as Record<string, unknown>)[name];
     if (typeof supported === "number") required[name] = Math.min(value, supported);
   }
   return required;
@@ -302,7 +302,7 @@ const WEBGPU_LIMIT_NAMES = [
   "maxUniformBuffersPerShaderStage",
 ] as const;
 
-function collectNumericLimits(limits: Record<string, unknown>): Record<string, number> {
+function collectNumericLimits(limits: GPUSupportedLimits): Record<string, number> {
   const result: Record<string, number> = {};
   for (const name of WEBGPU_LIMIT_NAMES) {
     const value = limits[name];

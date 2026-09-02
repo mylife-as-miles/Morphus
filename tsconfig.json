@@ -21,6 +21,8 @@
       "@blud/runtime-scripting": ["packages/runtime-scripting/src/index.ts"],
       "@blud/scene-importer": ["packages/scene-importer/src/index.ts"],
       "@blud/shared": ["packages/shared/src/index.ts"],
+      "@workspace/clustered-webgpu-lighting": ["packages/clustered-webgpu-lighting/src/index.ts"],
+      "@workspace/idtech-gi": ["packages/idtech-gi/src/index.ts"],
       "@blud/skatepark": ["packages/skatepark/src/index.ts"],
       "@blud/terrain": ["packages/terrain/src/index.ts"],
       "@blud/terrain/authoring": ["packages/terrain/src/authoring.ts"],
@@ -29,8 +31,9 @@
       "@blud/vfx": ["packages/vfx/src/index.ts"],
       "@blud/workers": ["packages/workers/src/index.ts"]
     },
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "node", "@webgpu/types"]
   },
   "include": ["src", "vite.config.ts"],
-  "exclude": ["src/app/api"]
+  "exclude": ["src/app/api"
+  ]
 }

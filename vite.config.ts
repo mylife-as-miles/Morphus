@@ -45,6 +45,9 @@ const workspaceAliases = {
   "@blud/runtime-scripting": path.resolve(repoRoot, "packages/runtime-scripting/src/index.ts"),
   "@blud/scene-importer": path.resolve(repoRoot, "packages/scene-importer/src/index.ts"),
   "@blud/skatepark": path.resolve(repoRoot, "packages/skatepark/src/index.ts"),
+  // Vendored from vibe-stack/super-terrain along with its editor.
+  "@workspace/clustered-webgpu-lighting": path.resolve(repoRoot, "packages/clustered-webgpu-lighting/src/index.ts"),
+  "@workspace/idtech-gi": path.resolve(repoRoot, "packages/idtech-gi/src/index.ts"),
   "@blud/workers": path.resolve(repoRoot, "packages/workers/src/index.ts")
 } as const;
 
@@ -197,6 +200,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: explicitBase ?? inferredGithubPagesBase,
+    // The vendored Mesh Terrain Lab compiles sections in a worker that awaits
+    // meshoptimizer at module scope. Top-level await needs an ES-module worker;
+    // the default 'iife' format cannot express it. Upstream sets the same.
+    worker: { format: "es" },
+    assetsInclude: ["**/*.bin.gz"],
     plugins: [
       react(),
       tailwindcss(),

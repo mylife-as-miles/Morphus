@@ -20,6 +20,8 @@
       "@blud/dev-sync": ["packages/dev-sync/src/index.ts"],
       "@blud/dev-sync/node": ["packages/dev-sync/src/node.ts"],
       "@blud/shared": ["packages/shared/src/index.ts"],
+      "@workspace/clustered-webgpu-lighting": ["packages/clustered-webgpu-lighting/src/index.ts"],
+      "@workspace/idtech-gi": ["packages/idtech-gi/src/index.ts"],
       "@blud/skatepark": ["packages/skatepark/src/index.ts"],
       "@blud/editor-core": ["packages/editor-core/src/index.ts"],
       "@blud/forest": ["packages/forest/src/index.ts"],
