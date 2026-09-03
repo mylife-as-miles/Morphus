@@ -1,4 +1,4 @@
-import path from "node:path";
+﻿import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { searchForWorkspaceRoot, defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
@@ -25,6 +25,7 @@ const editorThreeTSLPath = path.resolve(editorThreePath, "build/three.tsl.js");
 const workspaceAliases = {
   "@blud/dev-sync": path.resolve(repoRoot, "packages/dev-sync/src/index.ts"),
   "@blud/editor-core": path.resolve(repoRoot, "packages/editor-core/src/index.ts"),
+  "@blud/city": path.resolve(repoRoot, "packages/city/src/index.ts"),
   "@blud/forest": path.resolve(repoRoot, "packages/forest/src/index.ts"),
   "@blud/engine-config": path.resolve(repoRoot, "packages/engine-config/src/index.ts"),
   "@blud/gameplay-runtime": path.resolve(repoRoot, "packages/gameplay-runtime/src/index.ts"),

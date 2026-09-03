@@ -83,6 +83,9 @@ import { getRendererAdapter } from "@blud/renderer-backend";
 import { MeshTerrainLabLayer } from "@/viewport/components/MeshTerrainLabLayer";
 import { MeshTerrainObject } from "@/viewport/components/MeshTerrainObject";
 import { ForestLayer } from "@/viewport/components/ForestLayer";
+import { CityLayer } from "@/viewport/components/CityLayer";
+import { cityStore, useCitySnapshot } from "@/state/city-store";
+import { resolveGroundHeight } from "@/viewport/ground-height";
 import { VfxLayer } from "@/viewport/components/VfxLayer";
 import { useForestGrowth } from "@/viewport/hooks/useForestGrowth";
 import { forestStore, useForestSnapshot } from "@/state/forest-store";
@@ -577,6 +580,19 @@ export function ViewportCanvas({
   const editorInteractionEnabled = physicsPlayback === "stopped" || (physicsPlayback === "paused" && !previewPossessed);
 
   useForestGrowth(meshTerrainNode, editorInteractionEnabled);
+
+  const city = useCitySnapshot();
+
+  // Rebuilt when the terrain's authoring stack changes, so streets re-conform
+  // to a hill that was raised after they were laid.
+  const cityGroundHeight = useMemo(
+    () => resolveGroundHeight(meshTerrainNode),
+    [meshTerrainNode]
+  );
+
+  const handleCityRebuilt = useCallback(() => {
+    cityStore.markRebuilt();
+  }, []);
 
   const terrainTool = terrainToolFor(activeToolId);
   const terrainSculpt = useTerrainSculpt({
@@ -3821,6 +3837,13 @@ export function ViewportCanvas({
           />
         ) : null}
         <ForestLayer bakes={forestBakes} visible={!forest.interacting} />
+        {/* Streets resolve their ground through the same function the forest
+            does, so the two cannot disagree about where the terrain is. */}
+        <CityLayer
+          groundHeight={cityGroundHeight}
+          network={city.network}
+          onRebuilt={handleCityRebuilt}
+        />
         <VfxLayer enabled={isActiveViewport} />
         {/* Upstream's renderer, under our chrome. It draws only on WebGPU, so
             the geometry-only fallback below stays mounted for the WebGL path --

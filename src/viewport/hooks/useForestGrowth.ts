@@ -15,30 +15,11 @@
  */
 
 import { useEffect } from "react";
-import { evaluateHeight } from "@blud/terrain";
 import { createGroundSampler, type GroundSampler } from "@blud/forest";
 import type { GeometryNode } from "@blud/shared";
-import { isMeshTerrainNode } from "@blud/shared";
-import { getRendererAdapter } from "@blud/renderer-backend";
 import { forestStore } from "@/state/forest-store";
-import { meshTerrainWorld, subscribeMeshTerrain } from "@/state/mesh-terrain-lab";
-
-/**
- * True when the Mesh Terrain Lab is the thing actually drawing the ground.
- *
- * The lab's materials are TSL node graphs with no WebGL path, so
- * `MeshTerrainLabLayer` draws on WebGPU and renders nothing otherwise. The
- * ground a forest is planted on has to be the ground the viewer can see, so
- * this asks the same question that layer asks, the same way -- of the renderer
- * backend rather than by duck-typing three's renderer object.
- */
-function labIsDrawingGround(): boolean {
-  try {
-    return getRendererAdapter().backend === "webgpu";
-  } catch {
-    return false;
-  }
-}
+import { subscribeMeshTerrain } from "@/state/mesh-terrain-lab";
+import { resolveGroundHeight } from "@/viewport/ground-height";
 
 /** How often to look for a field that wants growing. */
 const POLL_MS = 180;
@@ -47,42 +28,11 @@ export function useForestGrowth(terrainNode: GeometryNode | undefined, enabled =
   useEffect(() => {
     if (!enabled) return;
 
-    const meshTerrain =
-      terrainNode && isMeshTerrainNode(terrainNode) ? terrainNode.data.meshTerrain : undefined;
-
-    // Which ground to plant on.
-    //
-    // There are two terrains in this viewport and they are not the same
-    // surface. The scene graph's terrain node is evaluated by `evaluateHeight`
-    // and drawn by `MeshTerrainObject` on WebGL; the lab keeps its own world,
-    // with its own seed and modifier stack, and draws it on WebGPU. Sampling
-    // the wrong one is not a small error -- measured on a default world, the
-    // lab's surface sits about 26 to 30 metres above the scene node's, so a
-    // stand grown against the node was planted that far underground and the
-    // forest simply could not be seen.
-    let heightAt: ((x: number, z: number) => number) | undefined;
-
-    if (labIsDrawingGround()) {
-      try {
-        const world = meshTerrainWorld();
-        heightAt = (x, z) => world.sampleHeight(x, z);
-      } catch {
-        // The lab world is constructed lazily and can throw before its config
-        // exists. Falling through to the scene node is better than not growing.
-        heightAt = undefined;
-      }
-    }
-
-    if (!heightAt && meshTerrain) {
-      heightAt = (x, z) =>
-        evaluateHeight(x, z, meshTerrain.seed, meshTerrain.profile, meshTerrain.modifiers);
-    }
-
-    const sampler: GroundSampler = heightAt
-      ? createGroundSampler(heightAt)
-      : // No terrain either way: a level plane, so the stand still lays out
-        // sensibly and regrows against real relief the moment terrain appears.
-        () => ({ height: 0, slope: 0, normal: [0, 1, 0] as const });
+    // Whichever terrain is actually on screen -- see `ground-height.ts` for why
+    // that question has a wrong answer worth 30 metres. Streets and buildings
+    // resolve through the same function, so they cannot disagree with a forest
+    // about where the ground is.
+    const sampler: GroundSampler = createGroundSampler(resolveGroundHeight(terrainNode));
 
     let cancelled = false;
 

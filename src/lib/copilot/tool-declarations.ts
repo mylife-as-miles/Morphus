@@ -1966,6 +1966,55 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
       required: ["channels"]
     }
   },
+  // -- Cities --------------------------------------------------------------
+  {
+    name: "generate_street_grid",
+    description:
+      "Lays out a street grid: avenues, cross streets, junctions, kerbs and footways, conformed to the terrain. This is the ground a city stands on -- blocks and buildings are derived from it, so run this before either. Block proportion matters more than block size; the default 80m by 275m is roughly Manhattan, and long thin blocks are most of what makes a grid read as a city rather than as graph paper. Replaces any existing network.",
+    parameters: {
+      type: "object",
+      properties: {
+        columns: { type: "number", description: "Blocks along x. 4 to 12 is a neighbourhood; above 20 gets heavy." },
+        rows: { type: "number", description: "Blocks along z." },
+        blockWidth: { type: "number", description: "Block interior width in meters, across the short side. Defaults to 80." },
+        blockDepth: { type: "number", description: "Block interior depth in meters, along the long side. Defaults to 275." },
+        centerX: { type: "number", description: "Grid centre x in world meters. Defaults to 0." },
+        centerZ: { type: "number", description: "Grid centre z in world meters. Defaults to 0." },
+        arterialEvery: { type: "number", description: "Every nth avenue is a wide arterial. Defaults to 4; 0 makes every street the same width, which reads flatter." },
+        rotation: { type: "number", description: "Rotation of the whole grid in degrees, so it need not align to the world axes." }
+      },
+      required: ["columns", "rows"]
+    }
+  },
+  {
+    name: "get_street_network",
+    description:
+      "Reports the street network: how many junctions and segments exist, the bounding extent, and a sample of segments with their widths and classes. Call before editing so changes are made against what is actually there.",
+    parameters: { type: "object", properties: {} }
+  },
+  {
+    name: "add_street",
+    description:
+      "Joins two junctions with a new street, creating either junction if it does not exist yet. Use it to extend a generated grid, cut a diagonal avenue across it, or build a network by hand. The road class sets width and footways unless overridden.",
+    parameters: {
+      type: "object",
+      properties: {
+        fromX: { type: "number", description: "Start junction x in world meters." },
+        fromZ: { type: "number", description: "Start junction z in world meters." },
+        toX: { type: "number", description: "End junction x in world meters." },
+        toZ: { type: "number", description: "End junction z in world meters." },
+        roadClass: { type: "string", enum: ["arterial", "street", "alley"], description: "arterial is a wide multi-lane avenue, street is the ordinary case, alley is narrow with no footways. Defaults to street." },
+        width: { type: "number", description: "Carriageway width in meters, kerb to kerb, overriding the class default." },
+        sidewalkWidth: { type: "number", description: "Footway width in meters per side. 0 removes footways." }
+      },
+      required: ["fromX", "fromZ", "toX", "toZ"]
+    }
+  },
+  {
+    name: "clear_street_network",
+    description: "Removes every street and junction. The terrain and everything else in the scene are untouched.",
+    parameters: { type: "object", properties: {} }
+  },
   // -- Forests -------------------------------------------------------------
   {
     name: "create_forest_field",

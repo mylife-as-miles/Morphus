@@ -129,6 +129,8 @@ import {
 } from "@blud/terrain/authoring";
 import { isVfxViewportReady, pendingVfxCastCount, requestVfxCast } from "@/state/vfx-runtime";
 import { ELEMENT_META, ELEMENTS, castShapeOf, type ElementId } from "@blud/vfx";
+import { generateGridNetwork } from "@blud/city";
+import { cityStore } from "@/state/city-store";
 import { forestStore } from "@/state/forest-store";
 import { FOREST_PRESETS, type ForestField, type ForestPresetId } from "@blud/forest";
 import { getProceduralWorldRuntimeStatus } from "@/lib/procedural-world/runtime-diagnostics";
@@ -2461,6 +2463,109 @@ async function executeToolInner(editor: EditorCore, name: string, args: Args, co
     }
 
     // -- Forests -----------------------------------------------------------
+
+    case "generate_street_grid": {
+      const columns = Math.round(num(args, "columns", 6));
+      const rows = Math.round(num(args, "rows", 4));
+      if (columns < 1 || rows < 1) return fail("columns and rows must both be at least 1.");
+      // A 40x40 grid is 3,200 segments and several million triangles of flat
+      // grey ground. Refusing is kinder than building it and hanging the tab.
+      if (columns * rows > 400) {
+        return fail(`${columns} by ${rows} is ${columns * rows} blocks; keep it under 400.`);
+      }
+
+      const { blockCorners, network } = generateGridNetwork({
+        arterialEvery: Math.max(0, Math.round(num(args, "arterialEvery", 4))),
+        blockDepth: num(args, "blockDepth", 275),
+        blockWidth: num(args, "blockWidth", 80),
+        centerX: num(args, "centerX", 0),
+        centerZ: num(args, "centerZ", 0),
+        columns,
+        rotation: (num(args, "rotation", 0) * Math.PI) / 180,
+        rows
+      });
+
+      cityStore.setNetwork(network, blockCorners);
+
+      return ok({
+        blocks: blockCorners.length,
+        junctions: Object.keys(network.nodes).length,
+        note: "Streets are laid. Blocks and buildings are not generated yet.",
+        segments: Object.keys(network.segments).length
+      });
+    }
+
+    case "get_street_network": {
+      const { network } = cityStore.getSnapshot();
+      const segments = Object.values(network.segments);
+      const nodes = Object.values(network.nodes);
+      if (nodes.length === 0) return ok({ junctions: 0, segments: 0, status: "No streets yet." });
+
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minZ = Infinity;
+      let maxZ = -Infinity;
+      for (const node of nodes) {
+        minX = Math.min(minX, node.x);
+        maxX = Math.max(maxX, node.x);
+        minZ = Math.min(minZ, node.z);
+        maxZ = Math.max(maxZ, node.z);
+      }
+
+      return ok({
+        extentMeters: {
+          maxX: Math.round(maxX),
+          maxZ: Math.round(maxZ),
+          minX: Math.round(minX),
+          minZ: Math.round(minZ)
+        },
+        junctions: nodes.length,
+        sample: segments.slice(0, 8).map((segment) => ({
+          id: segment.id,
+          roadClass: segment.roadClass,
+          sidewalkWidth: segment.sidewalkWidth,
+          width: segment.width
+        })),
+        segments: segments.length
+      });
+    }
+
+    case "add_street": {
+      const fromX = num(args, "fromX", 0);
+      const fromZ = num(args, "fromZ", 0);
+      const toX = num(args, "toX", 0);
+      const toZ = num(args, "toZ", 0);
+      if (fromX === toX && fromZ === toZ) return fail("A street needs two different endpoints.");
+
+      const roadClass = str(args, "roadClass", "street");
+      if (roadClass !== "arterial" && roadClass !== "street" && roadClass !== "alley") {
+        return fail("roadClass must be arterial, street or alley.");
+      }
+
+      // Endpoints are given as coordinates rather than ids because that is how
+      // an agent thinks about a map. Reusing a junction within a metre keeps a
+      // hand-built network connected instead of leaving two nodes a hair apart.
+      const fromId = cityStore.nodeNear(fromX, fromZ) ?? cityStore.createNode(fromX, fromZ);
+      const toId = cityStore.nodeNear(toX, toZ) ?? cityStore.createNode(toX, toZ);
+
+      const overrides: { width?: number; sidewalkWidth?: number } = {};
+      const width = optionalNum(args, "width");
+      if (width !== undefined) overrides.width = width;
+      const sidewalkWidth = optionalNum(args, "sidewalkWidth");
+      if (sidewalkWidth !== undefined) overrides.sidewalkWidth = sidewalkWidth;
+
+      const id = `s_${Date.now().toString(36)}`;
+      if (!cityStore.connect(id, fromId, toId, { roadClass, ...overrides })) {
+        return fail("Could not connect those junctions.");
+      }
+
+      return ok({ from: fromId, roadClass, segmentId: id, to: toId });
+    }
+
+    case "clear_street_network": {
+      cityStore.clear();
+      return ok({ cleared: true });
+    }
 
     case "create_forest_field": {
       const preset = str(args, "preset", "mossy-old-growth");

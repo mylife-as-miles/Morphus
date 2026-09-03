@@ -1,4 +1,4 @@
-{
+﻿{
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "baseUrl": ".",
@@ -8,6 +8,7 @@
       "@blud/dev-sync": ["packages/dev-sync/src/index.ts"],
       "@blud/dev-sync/node": ["packages/dev-sync/src/node.ts"],
       "@blud/editor-core": ["packages/editor-core/src/index.ts"],
+      "@blud/city": ["packages/city/src/index.ts"],
       "@blud/forest": ["packages/forest/src/index.ts"],
       "@blud/engine-config": ["packages/engine-config/src/index.ts"],
       "@blud/geometry-kernel": ["packages/geometry-kernel/src/index.ts"],
