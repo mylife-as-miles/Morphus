@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { ViewportCanvasProps } from "@/viewport/types";
 import { getFloorPreset } from "@/lib/floor-presets";
@@ -70,6 +71,15 @@ export function ConstructionGrid({
   viewport,
   viewportPlane
 }: Pick<ViewportCanvasProps, "activeToolId" | "onPlaceAsset" | "renderMode" | "sceneSettings" | "viewport" | "viewportPlane">) {
+  // Raw GLSL ShaderMaterial has no WebGPU path. Rendering it there does not
+  // merely look wrong: NodeBuilder rejects the material mid-render, which aborts
+  // R3F's tree before it sizes the canvas or mounts anything -- the whole
+  // viewport goes dark, not just this.
+  const isWebGPU = useThree(
+    (state) => (state.gl as unknown as { isWebGPURenderer?: boolean }).isWebGPURenderer === true
+  );
+  if (isWebGPU) return null;
+
   if (!viewport.grid.visible) {
     return null;
   }

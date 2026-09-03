@@ -19,7 +19,7 @@
  *    Dream Studio's own sky and lighting are not additive with it.
  */
 
-import { Suspense, useEffect, useMemo, useSyncExternalStore } from "react";
+import { Component, Suspense, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { getRendererAdapter } from "@blud/renderer-backend";
 import { TerrainScene } from "@/super-terrain/terrain/react/TerrainScene";
 import {
@@ -31,6 +31,32 @@ import {
   terrainForestStore,
   terrainTreeStore
 } from "@/state/mesh-terrain-lab";
+
+
+/**
+ * Keeps a failure inside the vendored scene from blanking the whole viewport.
+ *
+ * The scene is upstream's code running against our renderer, so the failure
+ * modes are the seams between them -- a material the backend cannot compile, a
+ * missing GPU limit. React's default is to unmount the entire tree above, which
+ * takes Dream Studio's editor down with it; this keeps the rest of the viewport
+ * alive and puts the reason somewhere findable.
+ */
+class MeshTerrainLabBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("[MeshTerrainLab] scene failed to render:", error);
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
 
 export type MeshTerrainLabLayerProps = {
   /** False leaves the scene unmounted, so nothing streams or compiles. */
@@ -98,15 +124,17 @@ export function MeshTerrainLabLayer({ enabled = true }: MeshTerrainLabLayerProps
   if (!enabled || !isWebGpu) return null;
 
   return (
-    <Suspense fallback={null}>
-      <TerrainScene
-        editor={terrainEditorStore}
-        foliage={terrainFoliageStore}
-        forest={terrainForestStore}
-        key={generation}
-        terrain={meshTerrainWorld()}
-        trees={terrainTreeStore}
-      />
-    </Suspense>
+    <MeshTerrainLabBoundary>
+      <Suspense fallback={null}>
+        <TerrainScene
+          editor={terrainEditorStore}
+          foliage={terrainFoliageStore}
+          forest={terrainForestStore}
+          key={generation}
+          terrain={meshTerrainWorld()}
+          trees={terrainTreeStore}
+        />
+      </Suspense>
+    </MeshTerrainLabBoundary>
   );
 }

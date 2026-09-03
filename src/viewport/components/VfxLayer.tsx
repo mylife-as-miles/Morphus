@@ -33,6 +33,12 @@ export type VfxShakeState = { shakeOffset: Vector3; shakeRoll: number };
 
 export function VfxLayer({ enabled = true }: { enabled?: boolean }) {
   const scene = useThree((state) => state.scene);
+  // Every ability is hand-written GLSL on a raw ShaderMaterial, which WebGPU
+  // cannot compile. NodeBuilder rejects it mid-render and takes R3F's whole
+  // tree with it, so this is a hard gate rather than a quality fallback.
+  const isWebGPU = useThree(
+    (state) => (state.gl as unknown as { isWebGPURenderer?: boolean }).isWebGPURenderer === true
+  );
   const rootRef = useRef<Group | null>(null);
 
   const shakeTarget = useMemo<VfxShakeState>(
@@ -62,7 +68,7 @@ export function VfxLayer({ enabled = true }: { enabled?: boolean }) {
   }, [shakeTarget]);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || isWebGPU) return;
     scene.add(runtime.root);
     setVfxViewportReady(true);
 
@@ -70,10 +76,10 @@ export function VfxLayer({ enabled = true }: { enabled?: boolean }) {
       setVfxViewportReady(false);
       scene.remove(runtime.root);
     };
-  }, [enabled, runtime, scene]);
+  }, [enabled, isWebGPU, runtime, scene]);
 
   useFrame((_, delta) => {
-    if (!enabled) return;
+    if (!enabled || isWebGPU) return;
 
     // Clamped: a tab that was backgrounded for a minute must not advance every
     // live cast by sixty seconds in one step.

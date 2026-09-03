@@ -79,6 +79,7 @@ import { NodeTransformGroup } from "@/viewport/components/NodeTransformGroup";
 import { ObjectTransformGizmo } from "@/viewport/components/ObjectTransformGizmo";
 import { PreviewNpcDialogueOverlay } from "@/viewport/components/PreviewNpcDialogueOverlay";
 import { ScenePreview } from "@/viewport/components/ScenePreview";
+import { getRendererAdapter } from "@blud/renderer-backend";
 import { MeshTerrainLabLayer } from "@/viewport/components/MeshTerrainLabLayer";
 import { MeshTerrainObject } from "@/viewport/components/MeshTerrainObject";
 import { ForestLayer } from "@/viewport/components/ForestLayer";
@@ -531,6 +532,15 @@ export function ViewportCanvas({
   // At most one mesh terrain per scene, matching how the procedural world node
   // is treated: it is the ground the rest of the scene sits on, not a prop.
   const meshTerrainNode = nodes.find(isMeshTerrainNode);
+  // Asked once here rather than per component: several things in this tree are
+  // raw GLSL and have to sit out the WebGPU path entirely.
+  const isWebGpuBackend = useMemo(() => {
+    try {
+      return getRendererAdapter().backend === "webgpu";
+    } catch {
+      return false;
+    }
+  }, []);
 
   const forest = useForestSnapshot();
   const forestToolActive = isForestToolId(activeToolId);
@@ -3724,7 +3734,10 @@ export function ViewportCanvas({
         {renderMode === "lit" && !proceduralWorldActive ? <hemisphereLight args={["#c7dcf8", "#07121f", 0.48]} /> : null}
         {renderMode !== "lit" && !proceduralWorldActive ? <hemisphereLight args={["#4a6890", "#060c14", 0.38]} /> : null}
         {renderMode === "lit" && !proceduralWorldActive ? <DefaultViewportSun center={renderScene.boundsCenter} /> : null}
-        {renderMode === "lit" && !proceduralWorldActive ? (
+        {/* drei draws contact shadows through a custom depth ShaderMaterial, which
+            NodeBuilder rejects on WebGPU -- and that rejection aborts the frame,
+            so it takes the whole viewport with it rather than just the shadow. */}
+        {renderMode === "lit" && !proceduralWorldActive && !isWebGpuBackend ? (
           <ContactShadows
             opacity={0.34}
             scale={80}

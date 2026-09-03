@@ -96,7 +96,14 @@ export class WebGPURendererAdapter implements RendererAdapter {
       // racing to own the same canvas.
       let pending = inFlightRenderers.get(canvas);
       if (!pending) {
-        pending = createWebGPURenderer(canvas);
+        // A rejection here is invisible: R3F swallows it, never runs its
+        // configure pass, and leaves an unsized 300x150 canvas with no store --
+        // which reads as "the editor renders nothing" rather than as an error.
+        pending = createWebGPURenderer(canvas).catch((error) => {
+          console.error("[WebGPURendererAdapter] renderer creation failed:", error);
+          inFlightRenderers.delete(canvas);
+          throw error;
+        });
         inFlightRenderers.set(canvas, pending);
       }
       return pending;
@@ -161,6 +168,19 @@ export class WebGPURendererAdapter implements RendererAdapter {
  * When Three.js promotes WebGPURenderer to stable, the dynamic import can be
  * replaced with a static one.
  */
+/** One adapter request per page, with a deadline so a stall cannot hang startup. */
+let adapterRequest: Promise<GPUAdapter | null> | null = null;
+
+function requestAdapterOnce(): Promise<GPUAdapter | null> {
+  adapterRequest ??= Promise.race([
+    navigator.gpu
+      .requestAdapter({ powerPreference: "high-performance" })
+      .catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000))
+  ]);
+  return adapterRequest;
+}
+
 /**
  * Limits raised past the guaranteed floor, clamped to what this adapter has.
  *
@@ -179,7 +199,15 @@ export class WebGPURendererAdapter implements RendererAdapter {
 async function headroomLimits(): Promise<Record<string, number>> {
   if (typeof navigator === "undefined" || !navigator.gpu) return {};
 
-  const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
+  // Memoised, and never left to hang.
+  //
+  // Capability detection already requested an adapter during engine bootstrap.
+  // Asking again here is a second concurrent request for the same GPU, and when
+  // that stalls it stalls the R3F `gl` factory with it -- R3F then never runs
+  // its configure pass, so the canvas stays at its default 300x150 with no
+  // store attached and the whole viewport renders nothing, silently. Falling
+  // back to the guaranteed floor is far better than never starting.
+  const adapter = await requestAdapterOnce();
   if (!adapter) return {};
 
   const wanted: Record<string, number> = {
