@@ -1,6 +1,81 @@
 # Dream Studio Editor
 
-Dream Studio Editor is the primary hackathon submission surface for Dream Studio: a browser-based 3D world editor and standalone game creation workspace powered by Gemma 4.
+Dream Studio Editor is a browser-based 3D world editor: terrain you can sculpt,
+forests you can grow, and a scene you can build, running on WebGPU.
+
+## WebMCP: the editor is the agent's tool surface
+
+Morphus registers 20 of the editor's own tools with the browser via
+`document.modelContext.registerTool`, so an agent can build a world *in the page
+the person is looking at* -- no server, no API key, no separate MCP process, and
+no copy of the editor's logic that can fall out of step.
+
+```js
+await document.modelContext.registerTool(
+  {
+    name: "terrain_sculpt_stroke",
+    description: "Sculpts the terrain along a path of world-space points...",
+    inputSchema: { /* JSON Schema, shared with the in-app Copilot */ },
+    annotations: { readOnlyHint: false, untrustedContentHint: true },
+    execute: async (input, { signal }) => { /* ... */ }
+  },
+  { signal: controller.signal }
+);
+```
+
+The interesting part is what is *not* here. There is no second implementation.
+The editor already described everything it can do to its own Copilot -- 145
+declarations, each with a description and a JSON Schema, executed by one
+switch. WebMCP asks for exactly that shape, so
+[`src/lib/webmcp/tools.ts`](src/lib/webmcp/tools.ts) is a bridge: a browser
+agent and the in-app Copilot run the same code, and neither can drift.
+
+**Twenty tools, not 145.** A tool list is a prompt. Every entry spends the
+agent's attention, and putting `offset_brush_face` beside `create_mesh_terrain`
+makes the capabilities that matter harder to find. The twenty are chosen to
+answer one question well -- *can a person and an agent build a 3D world
+together?* -- and the list leads with read tools (`list_nodes`,
+`get_terrain_state`, `capture_viewport_screenshot`) so an agent can act on what
+is actually in the scene rather than on what it assumed.
+
+**Budgets are enforced, not hoped for.** Chrome recommends 500 characters per
+description, 150 per parameter, 1.5K per result. Two descriptions ran over and
+are replaced with purpose-written text rather than truncated -- cutting a
+description removes the part that says when *not* to reach for a tool, which is
+the half an agent most needs. Oversized results come back as a short object
+that says it was shortened and names a narrower tool, because a silent
+truncation reads as a complete answer. `node scripts/webmcp-budget.mjs` checks
+all of it and exits non-zero.
+
+**The human can see what the agent did.** Tools run in the page, so the only
+record of a call is the one the page chooses to show. The menu bar carries an
+`AGENT` readout: how many tools are registered, and the name of the last call.
+Without it, geometry appears and nobody in the room knows whether the person or
+the model asked for it.
+
+### Try it
+
+Live: **[add deployment URL]**
+
+In Chrome, enable `chrome://flags/#enable-webmcp-testing`, open the editor, and
+ask an agent something like:
+
+> Make a mountain ridge running east to west, then put a forest in the valley
+> south of it.
+
+Without the flag, `?webmcp=stub` installs a minimal `modelContext` and a
+`window.__webmcp` harness so the tools can be driven straight from the console:
+
+```js
+await window.__webmcp.list();                    // the 20 registered names
+await window.__webmcp.describe("create_mesh_terrain");  // the schema an agent sees
+await window.__webmcp.call("create_mesh_terrain", { name: "Ridge" });
+```
+
+The stub is not an agent and does not pretend to be one -- there is no model in
+it. It answers the deterministic half of the question ("did this tool run and
+return what it promised") that Chrome's own guidance says to settle before
+writing evals.
 
 ## LAAS Procedural Worlds
 

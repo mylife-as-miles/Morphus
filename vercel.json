@@ -21,6 +21,10 @@
         {
           "key": "Cache-Control",
           "value": "no-store, max-age=0"
+        },
+        {
+          "key": "Origin-Agent-Cluster",
+          "value": "?1"
         }
       ]
     },
@@ -30,6 +34,10 @@
         {
           "key": "Cache-Control",
           "value": "no-store, max-age=0"
+        },
+        {
+          "key": "Origin-Agent-Cluster",
+          "value": "?1"
         }
       ]
     }
