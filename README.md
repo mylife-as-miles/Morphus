@@ -5,7 +5,7 @@ forests you can grow, and a scene you can build, running on WebGPU.
 
 ## WebMCP: the editor is the agent's tool surface
 
-Morphus registers 20 of the editor's own tools with the browser via
+Morphus registers all 145 of the editor's own tools with the browser via
 `document.modelContext.registerTool`, so an agent can build a world *in the page
 the person is looking at* -- no server, no API key, no separate MCP process, and
 no copy of the editor's logic that can fall out of step.
@@ -30,17 +30,27 @@ switch. WebMCP asks for exactly that shape, so
 [`src/lib/webmcp/tools.ts`](src/lib/webmcp/tools.ts) is a bridge: a browser
 agent and the in-app Copilot run the same code, and neither can drift.
 
-**Twenty tools, not 145.** A tool list is a prompt. Every entry spends the
-agent's attention, and putting `offset_brush_face` beside `create_mesh_terrain`
-makes the capabilities that matter harder to find. The twenty are chosen to
-answer one question well -- *can a person and an agent build a 3D world
-together?* -- and the list leads with read tools (`list_nodes`,
-`get_terrain_state`, `capture_viewport_screenshot`) so an agent can act on what
-is actually in the scene rather than on what it assumed.
+**All 145, ordered.** An earlier version exposed a curated twenty, on the
+theory that a tool list is a prompt and every entry spends the agent's
+attention. That holds for a short catalogue, but it cuts the other way here:
+the editor's real capability *is* the 145, and an agent that cannot inset a
+face or rebuild a navmesh is operating a demo of the editor rather than the
+editor. Curation became the agent's job, so the bridge does two things to make
+that job possible -- it leads the list with the read and world-building tools
+(`list_nodes`, `get_terrain_state`, `create_mesh_terrain`) because agents read
+a catalogue top-down, and it annotates every entry so read-only tools are
+callable speculatively and mutations are not.
+
+Read-only is derived from the tool name rather than hand-listed, because a
+hand-kept set of 25 beside 145 declarations goes stale the first time someone
+adds a `get_`. The one tool whose name lies about what it does
+(`capture_mesh_modeling_base` writes a modelling stack) is named as an
+exception in the source.
 
 **Budgets are enforced, not hoped for.** Chrome recommends 500 characters per
-description, 150 per parameter, 1.5K per result. Two descriptions ran over and
-are replaced with purpose-written text rather than truncated -- cutting a
+description, 150 per parameter, 30 per name, 1.5K per result. Three
+descriptions ran over and are replaced with purpose-written text rather than
+truncated -- cutting a
 description removes the part that says when *not* to reach for a tool, which is
 the half an agent most needs. Oversized results come back as a short object
 that says it was shortened and names a narrower tool, because a silent
@@ -67,7 +77,7 @@ Without the flag, `?webmcp=stub` installs a minimal `modelContext` and a
 `window.__webmcp` harness so the tools can be driven straight from the console:
 
 ```js
-await window.__webmcp.list();                    // the 20 registered names
+await window.__webmcp.list();                    // all 145 registered names
 await window.__webmcp.describe("create_mesh_terrain");  // the schema an agent sees
 await window.__webmcp.call("create_mesh_terrain", { name: "Ridge" });
 ```
