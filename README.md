@@ -55,7 +55,7 @@ the model asked for it.
 
 ### Try it
 
-Live: **[add deployment URL]**
+Live: **<https://morphus.myles4miles.chatgpt.site/>**
 
 In Chrome, enable `chrome://flags/#enable-webmcp-testing`, open the editor, and
 ask an agent something like:
@@ -82,8 +82,7 @@ writing evals.
 Copilot can create and configure a persistent LAAS `procedural-world` node with
 the `create_procedural_world` and `configure_procedural_*` tools. The world is
 WebGPU-only and reuses the viewport canvas; unsupported hosts show a diagnostic
-instead of a silent WebGL fallback. Details are in
-[`docs/PROCEDURAL_WORLD_EDITOR.md`](../../docs/PROCEDURAL_WORLD_EDITOR.md).
+instead of a silent WebGL fallback.
 
 The inspector and Copilot share canonical version-2 config with runtime export.
 Authored and effective values are shown separately, including preset/hardware
@@ -346,9 +345,7 @@ node scripts/generate-copilot-skills-manifest.mjs
 Repository skills are bundled for Vite and serverless production. Development
 can additionally load `~/.gemini/antigravity/skills`,
 `BLUD_COPILOT_SKILLS_DIR`, and `BLUD_COPILOT_EXTRA_SKILLS_DIRS`; repository
-skills retain priority. See
-[`docs/COPILOT_AAA_WORLDBUILDING_SKILL.md`](../../docs/COPILOT_AAA_WORLDBUILDING_SKILL.md)
-for the integration audit and limits.
+skills retain priority.
 
 Example prompts:
 
@@ -358,12 +355,6 @@ Example prompts:
 - `Use the supplied image as composition reference and create a matching world bookmark.`
 - `Turn this greybox into a detailed AAA-style sci-fi interior without changing the basic traversal route.`
 
-## Submission docs
+## Licence
 
-The repository root contains two Kaggle writeup drafts:
-
-- `KAGGLE_WRITEUP_DREAM_STUDIO.md` is the detailed master draft.
-- `KAGGLE_WRITEUP_DREAM_STUDIO_SUBMISSION.md` is the 1,500-word submission version.
-- `KAGGLE_WRITEUP_RESEARCH_NOTES.md` summarizes the Kaggle/winner writeup research and claim guardrails.
-
-Use the shorter version for Kaggle and the longer version as source material for the video script, architecture explanation, and repository documentation.
+MIT -- see [LICENSE](LICENSE).
