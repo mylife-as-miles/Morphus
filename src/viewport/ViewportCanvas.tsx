@@ -3841,6 +3841,7 @@ export function ViewportCanvas({
             does, so the two cannot disagree about where the terrain is. */}
         <CityLayer
           groundHeight={cityGroundHeight}
+          massing={city.massing}
           network={city.network}
           onRebuilt={handleCityRebuilt}
         />

@@ -129,7 +129,7 @@ import {
 } from "@blud/terrain/authoring";
 import { isVfxViewportReady, pendingVfxCastCount, requestVfxCast } from "@/state/vfx-runtime";
 import { ELEMENT_META, ELEMENTS, castShapeOf, type ElementId } from "@blud/vfx";
-import { generateGridNetwork } from "@blud/city";
+import { buildBlockPolygons, buildMassing, generateGridNetwork, subdivideBlock } from "@blud/city";
 import { cityStore } from "@/state/city-store";
 import { forestStore } from "@/state/forest-store";
 import { FOREST_PRESETS, type ForestField, type ForestPresetId } from "@blud/forest";
@@ -2564,6 +2564,77 @@ async function executeToolInner(editor: EditorCore, name: string, args: Args, co
 
     case "clear_street_network": {
       cityStore.clear();
+      return ok({ cleared: true });
+    }
+
+    case "generate_city_massing": {
+      const snapshot = cityStore.getSnapshot();
+      if (Object.keys(snapshot.network.segments).length === 0) {
+        return fail("There are no streets yet. Run generate_street_grid first.");
+      }
+      if (snapshot.blockCorners.length === 0) {
+        return fail(
+          "The network has no blocks recorded. Massing currently needs a grid from generate_street_grid."
+        );
+      }
+
+      const blocks = buildBlockPolygons({
+        blockCorners: snapshot.blockCorners,
+        network: snapshot.network,
+        setback: num(args, "setback", 0)
+      });
+
+      const seed = Math.round(num(args, "seed", 1));
+      const lotWidth = num(args, "lotWidth", 18);
+      const lotDepth = num(args, "lotDepth", 24);
+
+      const lots = blocks.flatMap((block, index) =>
+        subdivideBlock({
+          blockId: block.id,
+          lotDepth,
+          lotWidth,
+          polygon: block.points,
+          // Offsetting per block keeps neighbouring blocks from receiving the
+          // identical run of lot widths, which reads as a repeat at a glance.
+          seed: seed + index * 7919
+        })
+      );
+
+      if (lots.length === 0) {
+        return fail("The blocks were too small to divide into lots. Try a smaller lotWidth.");
+      }
+
+      const volumes = buildMassing({
+        centerX: num(args, "centerX", 0),
+        centerZ: num(args, "centerZ", 0),
+        falloffRadius: num(args, "falloffRadius", 400),
+        lots,
+        maxStoreys: Math.round(num(args, "maxStoreys", 12)),
+        minStoreys: Math.round(num(args, "minStoreys", 2)),
+        seed,
+        storeyHeight: num(args, "storeyHeight", 3.4)
+      });
+
+      let tallest = 0;
+      for (const volume of volumes) tallest = Math.max(tallest, volume.storeys);
+
+      cityStore.setMassing(volumes, {
+        blocks: blocks.length,
+        lots: lots.length,
+        tallestStoreys: tallest,
+        volumes: volumes.length
+      });
+
+      return ok({
+        blocks: blocks.length,
+        buildings: volumes.length,
+        note: "Massing volumes only -- facades, windows and roofs are not generated yet.",
+        tallestStoreys: tallest
+      });
+    }
+
+    case "clear_city_massing": {
+      cityStore.clearMassing();
       return ok({ cleared: true });
     }
 

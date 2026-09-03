@@ -8,6 +8,7 @@
  * it must not run on each edit of a single one.
  */
 
+import type { MassingVolume } from '../massing/massing'
 import {
   emptyRoadNetwork,
   type RoadClass,
@@ -26,6 +27,22 @@ export interface CitySnapshot {
   status: string
   /** Corner node ids per block, from the last grid layout. */
   blockCorners: string[][]
+  /**
+   * Building volumes, empty until massing has been run.
+   *
+   * Held here rather than recomputed in the layer because massing is a
+   * deliberate authoring step: an author tunes heights and re-runs it, and a
+   * layer that regenerated on every render would reseed the whole skyline on
+   * an unrelated state change.
+   */
+  massing: MassingVolume[]
+  /** How the massing was last built, for reporting and for re-running it. */
+  massingSummary?: {
+    blocks: number
+    lots: number
+    volumes: number
+    tallestStoreys: number
+  }
 }
 
 type Listener = () => void
@@ -36,6 +53,7 @@ export class CityStore {
   private state: CitySnapshot = {
     blockCorners: [],
     generation: 0,
+    massing: [],
     needsRebuild: false,
     network: emptyRoadNetwork(),
     status: 'No streets yet'
@@ -59,8 +77,13 @@ export class CityStore {
   setNetwork(network: RoadNetwork, blockCorners: string[][] = []): void {
     const segments = Object.keys(network.segments).length
     const nodes = Object.keys(network.nodes).length
+    // Massing is derived from the blocks this network encloses, so a new
+    // network makes the old volumes wrong rather than stale. Keeping them would
+    // leave buildings standing in the middle of the new streets.
     this.emit({
       blockCorners,
+      massing: [],
+      massingSummary: undefined,
       needsRebuild: true,
       network,
       status: `${segments} streets, ${nodes} junctions`
@@ -70,6 +93,8 @@ export class CityStore {
   clear(): void {
     this.emit({
       blockCorners: [],
+      massing: [],
+      massingSummary: undefined,
       needsRebuild: true,
       network: emptyRoadNetwork(),
       status: 'No streets yet'
@@ -155,6 +180,21 @@ export class CityStore {
     }
     this.emit({ needsRebuild: true, network })
     return true
+  }
+
+  /** Replaces the building volumes, as a massing run does. */
+  setMassing(massing: MassingVolume[], summary: CitySnapshot['massingSummary']): void {
+    const tallest = summary?.tallestStoreys ?? 0
+    this.emit({
+      massing,
+      massingSummary: summary,
+      needsRebuild: true,
+      status: `${massing.length} buildings, tallest ${tallest} storeys`
+    })
+  }
+
+  clearMassing(): void {
+    this.emit({ massing: [], massingSummary: undefined, needsRebuild: true })
   }
 
   /** Called by the viewport once it has rebuilt the mesh for this network. */

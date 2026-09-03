@@ -14,10 +14,18 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { BufferAttribute, BufferGeometry, type Mesh } from "three";
-import { buildRoadMesh, type GroundHeight, type RoadNetwork } from "@blud/city";
+import {
+  buildMassingMesh,
+  buildRoadMesh,
+  type GroundHeight,
+  type MassingVolume,
+  type RoadNetwork
+} from "@blud/city";
 
 export type CityLayerProps = {
   network: RoadNetwork;
+  /** Building volumes; empty until massing has been run. */
+  massing?: readonly MassingVolume[];
   /** Samples terrain height; a flat plane at zero when the scene has none. */
   groundHeight?: GroundHeight;
   visible?: boolean;
@@ -25,7 +33,13 @@ export type CityLayerProps = {
   onRebuilt?: () => void;
 };
 
-export function CityLayer({ groundHeight, network, onRebuilt, visible = true }: CityLayerProps) {
+export function CityLayer({
+  groundHeight,
+  massing,
+  network,
+  onRebuilt,
+  visible = true
+}: CityLayerProps) {
   const meshRef = useRef<Mesh | null>(null);
 
   const geometry = useMemo(() => {
@@ -59,14 +73,50 @@ export function CityLayer({ groundHeight, network, onRebuilt, visible = true }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geometry]);
 
-  if (!visible || !geometry) return null;
+  const massingGeometry = useMemo(() => {
+    if (!massing || massing.length === 0) return null;
+
+    const data = buildMassingMesh(massing, groundHeight);
+    if (data.vertexCount === 0) return null;
+
+    const next = new BufferGeometry();
+    next.setAttribute("position", new BufferAttribute(data.positions, 3));
+    next.setAttribute("normal", new BufferAttribute(data.normals, 3));
+    next.setAttribute("color", new BufferAttribute(data.colors, 3));
+    next.setIndex(new BufferAttribute(data.indices, 1));
+    next.computeBoundingSphere();
+    return next;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [massing]);
+
+  useEffect(() => {
+    return () => {
+      massingGeometry?.dispose();
+    };
+  }, [massingGeometry]);
+
+  if (!visible) return null;
 
   return (
-    <mesh geometry={geometry} name="CityStreets" receiveShadow ref={meshRef}>
-      {/* Vertex colours carry the surface distinction, so one material covers
-          carriageway, kerb and footway. Rough and unlit-looking on purpose:
-          asphalt has no interesting specular at city scale. */}
-      <meshStandardMaterial metalness={0} roughness={0.95} vertexColors />
-    </mesh>
+    <group name="City">
+      {geometry ? (
+        <mesh geometry={geometry} name="CityStreets" receiveShadow ref={meshRef}>
+          {/* Vertex colours carry the surface distinction, so one material
+              covers carriageway, kerb and footway. Rough and unlit-looking on
+              purpose: asphalt has no interesting specular at city scale. */}
+          <meshStandardMaterial metalness={0} roughness={0.95} vertexColors />
+        </mesh>
+      ) : null}
+
+      {massingGeometry ? (
+        <mesh castShadow geometry={massingGeometry} name="CityMassing" receiveShadow>
+          {/* Flat-shaded and unapologetically saturated. Massing is a diagram:
+              its job is to make one volume readable against the one behind it,
+              and anything approaching concrete merges them into a grey mass
+              exactly when the silhouette is what you are judging. */}
+          <meshStandardMaterial flatShading metalness={0} roughness={0.85} vertexColors />
+        </mesh>
+      ) : null}
+    </group>
   );
 }

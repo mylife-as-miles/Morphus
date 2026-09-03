@@ -2015,6 +2015,31 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
     description: "Removes every street and junction. The terrain and everything else in the scene are untouched.",
     parameters: { type: "object", properties: {} }
   },
+  {
+    name: "generate_city_massing",
+    description:
+      "Fills the street grid's blocks with building volumes. Divides each block into lots with street frontage, then extrudes each lot to a height, so buildings stand shoulder to shoulder along the street with a shared interior behind. This is the stage that decides a city's silhouette -- skyline, street wall, where the towers cluster -- and it renders as flat coloured boxes rather than finished facades. Requires a street network; run generate_street_grid first.",
+    parameters: {
+      type: "object",
+      properties: {
+        lotWidth: { type: "number", description: "Target street frontage per building in meters. Defaults to 18. Smaller reads as townhouses, larger as apartment blocks." },
+        lotDepth: { type: "number", description: "How far back from the street a building reaches, in meters. Defaults to 24. Clamped so two rows on a shallow block cannot overlap." },
+        minStoreys: { type: "number", description: "Fewest storeys for a building at the edge of the city. Defaults to 2." },
+        maxStoreys: { type: "number", description: "Most storeys for a building at the centre. Defaults to 12." },
+        storeyHeight: { type: "number", description: "Floor-to-floor height in meters. Defaults to 3.4." },
+        centerX: { type: "number", description: "Where the tall buildings cluster, x in world meters. Defaults to 0." },
+        centerZ: { type: "number", description: "Where the tall buildings cluster, z in world meters. Defaults to 0." },
+        falloffRadius: { type: "number", description: "How far from the centre height falls off, in meters. Defaults to 400. Large values make the city uniformly tall." },
+        setback: { type: "number", description: "Extra gap between the footway and the building line, in meters. 0 (default) is a dense downtown; larger values suburbanise it." },
+        seed: { type: "number", description: "Seed for lot widths and heights. The same seed rebuilds the same city." }
+      }
+    }
+  },
+  {
+    name: "clear_city_massing",
+    description: "Removes every building volume, leaving the street network in place.",
+    parameters: { type: "object", properties: {} }
+  },
   // -- Forests -------------------------------------------------------------
   {
     name: "create_forest_field",
