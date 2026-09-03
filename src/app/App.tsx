@@ -107,7 +107,9 @@ import type { MeshEditMode } from "@/viewport/editing";
 import type { ViewportBlockoutDropKind } from "@/viewport/utils/viewport-blockout-dnd";
 import { useAppHotkeys } from "@/app/hooks/useAppHotkeys";
 import { useCopilot } from "@/app/hooks/useCopilot";
+import { useWebMcp } from "@/lib/webmcp/useWebMcp";
 import { GameConnectionControl } from "@/components/editor-shell/GameConnectionControl";
+import { WebMcpIndicator } from "@/components/editor-shell/WebMcpIndicator";
 import { useEditorSubscriptions } from "@/app/hooks/useEditorSubscriptions";
 import { 
   buildBank, buildBowl, buildFunBox, buildHalfPipe, buildHip, buildHubbaLedge, 
@@ -2024,7 +2026,12 @@ export function App() {
     });
   };
 
-  const copilot = useCopilot(editor, {
+  // One context, two callers.
+  //
+  // The in-app Copilot and a browser agent reach the same tools through the
+  // same executor, so they share the host callbacks too. Building this once
+  // keeps a screenshot taken by an agent identical to one taken by Copilot.
+  const copilotToolContext = {
     captureViewportScreenshot: async () => {
       const capture = viewportScreenshotCapturesRef.current.get(uiStore.activeViewportId);
       if (!capture) {
@@ -2041,7 +2048,13 @@ export function App() {
     }) => {
       void handlePushSceneToGame(options).catch(() => {});
     }
-  });
+  };
+
+  const copilot = useCopilot(editor, copilotToolContext);
+
+  // Offers the same tools to the browser's own agent. A no-op where WebMCP is
+  // absent, which is every browser without the flag or the origin trial.
+  const webMcp = useWebMcp(editor, copilotToolContext);
 
   const handleToggleCopilot = () => {
     uiStore.copilotPanelOpen = !uiStore.copilotPanelOpen;
@@ -2219,6 +2232,7 @@ export function App() {
         activeBrushShape={activeBrushShape}
         copilot={copilot}
         copilotPanelOpen={ui.copilotPanelOpen}
+        agentStatus={<WebMcpIndicator status={webMcp} />}
         gameConnectionControl={
           <GameConnectionControl
             activeGame={gameConnection.activeGame}

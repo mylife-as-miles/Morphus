@@ -80,6 +80,7 @@ type EditorShellProps = {
     clearLatestGame: () => void;
   };
   copilotPanelOpen: boolean;
+  agentStatus?: ReactNode;
   gameConnectionControl?: ReactNode;
   logicViewerOpen: boolean;
   toolsPanelOpen: boolean;
@@ -242,6 +243,7 @@ export function EditorShell({
   aiModelPlacementArmed,
   copilot,
   copilotPanelOpen,
+  agentStatus,
   gameConnectionControl,
   logicViewerOpen,
   toolsPanelOpen,
@@ -525,6 +527,7 @@ export function EditorShell({
             canRedo={canRedo}
             canUndo={canUndo}
             copilotOpen={copilotPanelOpen}
+            agentStatus={agentStatus}
             gameConnectionControl={gameConnectionControl}
             btEditorOpen={btEditorOpen}
             logicViewerOpen={logicViewerOpen}

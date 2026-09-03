@@ -18,6 +18,8 @@ type EditorMenuBarProps = {
   canRedo: boolean;
   canUndo: boolean;
   copilotOpen: boolean;
+  /** Slot for the WebMCP agent indicator; absent where WebMCP is not available. */
+  agentStatus?: ReactNode;
   gameConnectionControl?: ReactNode;
   btEditorOpen: boolean;
   logicViewerOpen: boolean;
@@ -64,6 +66,7 @@ export function EditorMenuBar({
   canRedo,
   canUndo,
   copilotOpen,
+  agentStatus,
   gameConnectionControl,
   btEditorOpen,
   logicViewerOpen,
@@ -418,6 +421,7 @@ export function EditorMenuBar({
             <Square className="size-3.5" />
           </Button>
         </div>
+        {agentStatus}
         {gameConnectionControl ? (
           <div className="editor-toolbar-segment flex items-center gap-1 rounded-[14px] px-1.5 py-1">
             <span className="hidden pl-1 text-[9px] font-semibold tracking-[0.16em] text-white/38 uppercase xl:block">

@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { installChunkReloadHandler, isChunkLoadError, reloadOnceForFreshAssets } from "@/lib/chunk-reload";
+import { installWebMcpStub } from "@/lib/webmcp/stub";
 
 const pathname = window.location.pathname;
 const isPlayPage = pathname === "/play";
@@ -24,6 +25,14 @@ const isMeshTerrainLab =
 // Loaded lazily per workspace: the editor and the vendored lab ship
 // conflicting global stylesheets.
 if (!isMeshTerrainLab) void import("@/styles.css");
+
+// Must run before the editor mounts: the bridge registers its tools in an
+// effect, and a modelContext installed after that would never be seen. A static
+// import rather than a dynamic one for exactly that reason -- the stub has to
+// be in place synchronously, not a microtask later.
+if (installWebMcpStub()) {
+  console.info("[WebMCP] Stub installed. Use window.__webmcp.list() / .call(name, input).");
+}
 
 installChunkReloadHandler();
 
