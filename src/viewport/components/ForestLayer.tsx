@@ -27,6 +27,7 @@ import {
   type TreeLodChoice,
   type TreePrototypeGeometry
 } from "@/viewport/hooks/useTreePrototypes";
+import { barkBaseColour, leafBaseColour } from "@/viewport/components/tree-base-colours";
 
 export type ForestLayerProps = {
   bakes: readonly ForestFieldBake[];
@@ -86,7 +87,14 @@ function StemInstances({
       receiveShadow
       ref={meshRef}
     >
-      <meshStandardMaterial roughness={0.92} metalness={0} vertexColors />
+      {/* The geometry's colours are tints around 0.8, not albedo, so they are
+          multiplied by the species' bark colour rather than shown raw. */}
+      <meshStandardMaterial
+        color={barkBaseColour(prototype.prototypeId)}
+        metalness={0}
+        roughness={0.92}
+        vertexColors
+      />
     </instancedMesh>
   );
 }
@@ -164,9 +172,14 @@ function CanopyInstances({
       frustumCulled={false}
       ref={meshRef}
     >
-      <instancedBufferAttribute attach="geometry-attributes-color" args={[colours, 3]} />
+      {/* `instanceColor`, not `geometry.attributes.color`: this array holds one
+          colour per *instance*, and the card geometry has four vertices. Bound
+          as a vertex attribute the shader read four floats off the front of the
+          buffer and every card in the canopy took the same colour. */}
+      <instancedBufferAttribute attach="instanceColor" args={[colours, 3]} />
       <meshStandardMaterial
         alphaTest={0.35}
+        color={leafBaseColour(prototype.prototypeId)}
         roughness={0.86}
         side={DoubleSide}
         transparent
