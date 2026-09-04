@@ -2054,6 +2054,24 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
     description: "Removes every building volume, leaving the street network in place.",
     parameters: { type: "object", properties: {} }
   },
+  {
+    name: "generate_city_buildings",
+    description:
+      "Replaces the tallest massing volumes with real buildings: limestone banks, setback towers and corner headquarters, with colonnades, windows, cornices and roof equipment. Only a few dozen are generated because each costs around 140,000 triangles, so they stand as landmarks among the massing boxes rather than replacing all of them -- which is what a downtown looks like anyway. Requires massing; run generate_city_massing first.",
+    parameters: {
+      type: "object",
+      properties: {
+        count: { type: "number", description: "How many landmarks to generate, tallest lots first. Defaults to 12. Above about 40 the viewport slows noticeably." },
+        coverage: { type: "number", description: "Fraction of lots to build instead of a fixed count, 0 to 1. Whichever of this and `count` is smaller wins. Defaults to 0.08." },
+        seed: { type: "number", description: "Seed for materials and proportions. The same seed rebuilds the same buildings." }
+      }
+    }
+  },
+  {
+    name: "clear_city_buildings",
+    description: "Removes the generated landmark buildings. The massing boxes they replaced come back, and streets are untouched.",
+    parameters: { type: "object", properties: {} }
+  },
   // -- Forests -------------------------------------------------------------
   {
     name: "create_forest_field",

@@ -129,7 +129,13 @@ import {
 } from "@blud/terrain/authoring";
 import { isVfxViewportReady, pendingVfxCastCount, requestVfxCast } from "@/state/vfx-runtime";
 import { ELEMENT_META, ELEMENTS, castShapeOf, type ElementId } from "@blud/vfx";
-import { buildBlockPolygons, buildMassing, generateGridNetwork, subdivideBlock } from "@blud/city";
+import {
+  buildBlockPolygons,
+  buildBuildings,
+  buildMassing,
+  generateGridNetwork,
+  subdivideBlock
+} from "@blud/city";
 import { cityStore } from "@/state/city-store";
 import { forestStore } from "@/state/forest-store";
 import { FOREST_PRESETS, type ForestField, type ForestPresetId } from "@blud/forest";
@@ -2654,6 +2660,75 @@ async function executeToolInner(editor: EditorCore, name: string, args: Args, co
 
     case "clear_city_massing": {
       cityStore.clearMassing();
+      return ok({ cleared: true });
+    }
+
+    case "generate_city_buildings": {
+      const snapshot = cityStore.getSnapshot();
+      if (snapshot.massing.length === 0) {
+        return fail("There are no massing volumes yet. Run generate_city_massing first.");
+      }
+      if (snapshot.blockCorners.length === 0) {
+        return fail("The network has no blocks recorded. Run generate_street_grid first.");
+      }
+
+      // The lots are rebuilt rather than stored, because massing keeps only the
+      // volumes and a building needs its lot's frontage and facing to sit on
+      // the street. Same inputs and same seeds, so the same lots come back.
+      const blocks = buildBlockPolygons({
+        blockCorners: snapshot.blockCorners,
+        network: snapshot.network
+      });
+      const seed = Math.round(num(args, "seed", 1));
+      const lots = blocks.flatMap((block, index) =>
+        subdivideBlock({
+          blockId: block.id,
+          polygon: block.points,
+          seed: seed + index * 7919
+        })
+      );
+
+      const count = Math.max(0, Math.round(num(args, "count", 12)));
+      // Each building is real geometry generated on the main thread at roughly
+      // 300ms, so an unbounded count is a frozen tab rather than a big city.
+      if (count > 60) {
+        return fail(`${count} buildings is too many; keep it at 60 or fewer.`);
+      }
+
+      const buildings = buildBuildings({
+        coverage: num(args, "coverage", 0.08),
+        lots,
+        maxBuildings: count,
+        seed,
+        volumes: snapshot.massing
+      });
+
+      if (buildings.length === 0) {
+        return fail(
+          "No lot was large enough for a building. Try a larger lotWidth in generate_city_massing."
+        );
+      }
+
+      cityStore.setBuildings(buildings);
+
+      let triangles = 0;
+      const variants: Record<string, number> = {};
+      for (const building of buildings) {
+        triangles += building.generated.triangleCount;
+        variants[building.variant] = (variants[building.variant] ?? 0) + 1;
+      }
+
+      return ok({
+        buildings: buildings.length,
+        massingRemaining: snapshot.massing.length - buildings.length,
+        note: "Landmarks only. The rest of the city is still massing volumes.",
+        triangles,
+        variants
+      });
+    }
+
+    case "clear_city_buildings": {
+      cityStore.clearBuildings();
       return ok({ cleared: true });
     }
 

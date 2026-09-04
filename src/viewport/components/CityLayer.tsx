@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Draws the street network in the viewport.
  *
  * three-roads owns the deck, kerb returns and road paint. Its replaceable road
@@ -16,6 +16,7 @@ import { BufferAttribute, BufferGeometry } from "three";
 import {
   buildMassingMesh,
   buildRoadSurfaceMeshes,
+  type BuildingInstance,
   type GroundHeight,
   type MassingVolume,
   type RoadCrosswalk,
@@ -23,11 +24,17 @@ import {
   type RoadRenderMeshData
 } from "@blud/city";
 
+import { CityBuildings } from "@/viewport/components/CityBuildings";
+
 export type CityLayerProps = {
   network: RoadNetwork;
   crosswalks?: readonly RoadCrosswalk[];
   /** Building volumes; empty until massing has been run. */
   massing?: readonly MassingVolume[];
+  /** Generated landmarks; empty until the facade pass has run. */
+  buildings?: readonly BuildingInstance[];
+  /** Lots that carry a real building, so their massing box is skipped. */
+  builtLotIds?: ReadonlySet<string>;
   /** Samples terrain height; a flat plane at zero when the scene has none. */
   groundHeight?: GroundHeight;
   /**
@@ -45,6 +52,8 @@ export type CityLayerProps = {
 };
 
 export function CityLayer({
+  buildings,
+  builtLotIds,
   crosswalks,
   groundHeight,
   groundHeightCacheKey,
@@ -96,7 +105,14 @@ export function CityLayer({
   const massingGeometry = useMemo(() => {
     if (!massing || massing.length === 0) return null;
 
-    const data = buildMassingMesh(massing, groundHeight);
+    // A lot with a real building on it must not also carry its massing box, or
+    // the box sits inside the facade and z-fights through every window.
+    const remaining = builtLotIds?.size
+      ? massing.filter((volume) => !builtLotIds.has(volume.lotId))
+      : massing;
+    if (remaining.length === 0) return null;
+
+    const data = buildMassingMesh(remaining, groundHeight);
     if (data.vertexCount === 0) return null;
 
     const next = new BufferGeometry();
@@ -107,7 +123,7 @@ export function CityLayer({
     next.computeBoundingSphere();
     return next;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [massing]);
+  }, [massing, builtLotIds]);
 
   useEffect(() => {
     return () => {
@@ -146,6 +162,8 @@ export function CityLayer({
           ))}
         </mesh>
       ) : null}
+
+      {buildings && buildings.length > 0 ? <CityBuildings buildings={buildings} /> : null}
 
       {massingGeometry ? (
         <mesh castShadow geometry={massingGeometry} name="CityMassing" receiveShadow>

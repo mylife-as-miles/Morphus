@@ -9,6 +9,7 @@
  */
 
 import type { MassingVolume } from '../massing/massing'
+import type { BuildingInstance } from '../buildings/buildingFromLot'
 import {
   emptyRoadNetwork,
   type RoadCrosswalk,
@@ -39,6 +40,16 @@ export interface CitySnapshot {
    * an unrelated state change.
    */
   massing: MassingVolume[]
+  /**
+   * Generated landmark buildings, empty until the facade pass has run.
+   *
+   * A subset of `massing`, never all of it: the grammar costs about 140k
+   * triangles per building, so a few dozen stand among the boxes rather than
+   * replacing them. `builtLotIds` is what the massing layer reads to stop
+   * drawing a box where a real building now stands.
+   */
+  buildings: BuildingInstance[]
+  builtLotIds: ReadonlySet<string>
   /** How the massing was last built, for reporting and for re-running it. */
   massingSummary?: {
     blocks: number
@@ -55,6 +66,8 @@ export class CityStore {
 
   private state: CitySnapshot = {
     blockCorners: [],
+    buildings: [],
+    builtLotIds: new Set<string>(),
     crosswalks: [],
     generation: 0,
     massing: [],
@@ -86,6 +99,8 @@ export class CityStore {
     // leave buildings standing in the middle of the new streets.
     this.emit({
       blockCorners,
+      buildings: [],
+      builtLotIds: new Set<string>(),
       crosswalks: [],
       massing: [],
       massingSummary: undefined,
@@ -98,6 +113,8 @@ export class CityStore {
   clear(): void {
     this.emit({
       blockCorners: [],
+      buildings: [],
+      builtLotIds: new Set<string>(),
       crosswalks: [],
       massing: [],
       massingSummary: undefined,
@@ -201,7 +218,11 @@ export class CityStore {
   /** Replaces the building volumes, as a massing run does. */
   setMassing(massing: MassingVolume[], summary: CitySnapshot['massingSummary']): void {
     const tallest = summary?.tallestStoreys ?? 0
+    // New massing means the landmarks generated from the old volumes now stand
+    // on lots that may no longer exist, so they go with it.
     this.emit({
+      buildings: [],
+      builtLotIds: new Set<string>(),
       massing,
       massingSummary: summary,
       needsRebuild: true,
@@ -210,7 +231,27 @@ export class CityStore {
   }
 
   clearMassing(): void {
-    this.emit({ massing: [], massingSummary: undefined, needsRebuild: true })
+    this.emit({
+      buildings: [],
+      builtLotIds: new Set<string>(),
+      massing: [],
+      massingSummary: undefined,
+      needsRebuild: true
+    })
+  }
+
+  /** Replaces the generated landmarks, as a facade run does. */
+  setBuildings(buildings: BuildingInstance[]): void {
+    this.emit({
+      buildings,
+      builtLotIds: new Set(buildings.map((building) => building.lotId)),
+      needsRebuild: true,
+      status: `${buildings.length} buildings among ${this.state.massing.length} volumes`
+    })
+  }
+
+  clearBuildings(): void {
+    this.emit({ buildings: [], builtLotIds: new Set<string>(), needsRebuild: true })
   }
 
   /** Called by the viewport once it has rebuilt the mesh for this network. */

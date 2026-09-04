@@ -520,6 +520,15 @@ export function ViewportCanvas({
 }: ViewportCanvasProps) {
   const cameraRef = useRef<Camera | null>(null);
   const canvasElementRef = useRef<HTMLCanvasElement | null>(null);
+  /**
+   * The live renderer, kept so its own size can be corrected.
+   *
+   * Resizing the canvas is not the same as resizing the renderer: on WebGPU the
+   * render targets and depth texture are allocated at construction, and a
+   * canvas that grows afterwards leaves them behind. `setSize` is what
+   * reallocates them.
+   */
+  const rendererRef = useRef<{ setSize: (width: number, height: number, updateStyle?: boolean) => void } | null>(null);
   const aiPlacementClickOriginRef = useRef<Vector2 | null>(null);
   const brushClickOriginRef = useRef<Vector2 | null>(null);
   const marqueeOriginRef = useRef<Vector2 | null>(null);
@@ -3722,8 +3731,31 @@ export function ViewportCanvas({
     if (!canvasReady) return;
 
     let remaining = 12;
+
     const nudge = () => {
       window.dispatchEvent(new Event("resize"));
+
+      // Resizing the canvas is not the same as resizing the renderer. On WebGPU
+      // the render targets and depth texture are allocated when the renderer is
+      // built, and a canvas that grows afterwards leaves them at whatever size
+      // they were -- which produces, once per frame and forever:
+      //
+      //   The resolve target size (width: 783, height: 379) does not match the
+      //   size of the other attachments (width: 300, height: 150)
+      //
+      // and a black viewport. `setSize` is what reallocates them, so the
+      // renderer is told directly rather than being expected to notice.
+      const host = viewportRootRef.current;
+      const renderer = rendererRef.current;
+      if (host && renderer) {
+        const { height, width } = host.getBoundingClientRect();
+        if (width > 0 && height > 0) {
+          // `false` leaves the CSS size alone: R3F owns the element's style and
+          // fighting it over that causes a resize loop.
+          renderer.setSize(width, height, false);
+        }
+      }
+
       remaining -= 1;
       if (remaining <= 0) window.clearInterval(timer);
     };
@@ -3793,6 +3825,7 @@ export function ViewportCanvas({
         onCreated={(state: RootState) => {
           cameraRef.current = state.camera;
           canvasElementRef.current = state.gl.domElement;
+          rendererRef.current = state.gl as unknown as typeof rendererRef.current;
         }}
         onPointerMissed={() => {
           if (!editorInteractionEnabled) {
@@ -3860,6 +3893,8 @@ export function ViewportCanvas({
             does, so the two cannot disagree about where the terrain is. */}
         <CityLayer
           crosswalks={city.crosswalks}
+          buildings={city.buildings}
+          builtLotIds={city.builtLotIds}
           groundHeight={cityGroundHeight}
           groundHeightCacheKey={meshTerrainNode ?? city.network}
           massing={city.massing}
