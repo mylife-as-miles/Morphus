@@ -1,7 +1,7 @@
 {
   "name": "@blud/procedural-world",
   "version": "0.1.0",
-  "description": "LAAS-derived WebGPU procedural open-world runtime for Dream Studio.",
+  "description": "LAAS-derived WebGPU procedural open-world runtime for Morphus.",
   "license": "MIT",
   "type": "module",
   "sideEffects": true,

@@ -18,7 +18,7 @@ export function PlayPage() {
   const [selectionRevision, setSelectionRevision] = useState(0);
   const [physicsPlayback, setPhysicsPlayback] = useState<"paused" | "running" | "stopped">("stopped");
   const [physicsRevision, setPhysicsRevision] = useState(0);
-  const [projectName, setProjectName] = useState("Dream Studio");
+  const [projectName, setProjectName] = useState("Morphus");
   const [loading, setLoading] = useState(true);
   const [shared, setShared] = useState(false);
   const [viewport, setViewport] = useState<ViewportState>(() => createEditorViewports()["perspective"]);
@@ -53,7 +53,7 @@ export function PlayPage() {
 
         if (draft) {
           editor.importSnapshot(draft.snapshot, "scene:restore-draft");
-          setProjectName(draft.projectName || "Dream Studio");
+          setProjectName(draft.projectName || "Morphus");
         }
       } catch (error) {
         console.warn("[PlayPage] Failed to load draft.", error);
@@ -97,7 +97,7 @@ export function PlayPage() {
           </div>
           <div>
             <div className="text-sm font-semibold text-white/90 leading-none">{projectName}</div>
-            <div className="mt-0.5 text-[10px] text-white/40">Dream Studio</div>
+            <div className="mt-0.5 text-[10px] text-white/40">Morphus</div>
           </div>
         </div>
 

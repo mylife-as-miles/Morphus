@@ -1,6 +1,6 @@
-# Dream Studio Editor
+# Morphus Editor
 
-Dream Studio Editor is a browser-based 3D world editor: terrain you can sculpt,
+Morphus Editor is a browser-based 3D world editor: terrain you can sculpt,
 forests you can grow, and a scene you can build, running on WebGPU.
 
 ## WebMCP: the editor is the agent's tool surface
@@ -154,7 +154,7 @@ It is built for creative access. A player, solo creator, storyteller, student, m
 
 ## Why this editor matters
 
-Game creation is still locked behind programming, 3D modeling, animation, engine knowledge, debugging, asset pipelines, funding, team coordination, and hardware that can run advanced engines. Dream Studio changes the entry point: creators can start with natural language and learn by inspecting the playable artifact Gemma 4 helps build.
+Game creation is still locked behind programming, 3D modeling, animation, engine knowledge, debugging, asset pipelines, funding, team coordination, and hardware that can run advanced engines. Morphus changes the entry point: creators can start with natural language and learn by inspecting the playable artifact Gemma 4 helps build.
 
 For the Gemma 4 Good Hackathon, this editor is positioned under Digital Equity & Inclusivity:
 
@@ -166,7 +166,7 @@ For the Gemma 4 Good Hackathon, this editor is positioned under Digital Equity &
 
 ### Copilot
 
-Copilot edits the live Dream Studio viewport. It can create and refine 3D scenes by calling structured tools against the editor command stack.
+Copilot edits the live Morphus viewport. It can create and refine 3D scenes by calling structured tools against the editor command stack.
 
 Copilot can:
 
@@ -197,7 +197,7 @@ The loop is:
 user prompt
   -> Gemma 4
   -> structured tool calls
-  -> Dream Studio executes tools
+  -> Morphus executes tools
   -> tool results return to Gemma 4
   -> optional screenshot or file inspection
   -> refinement or final artifact
@@ -207,7 +207,7 @@ This lets Gemma 4 help inside the editor workflow, not just generate text beside
 
 ## Tool surface
 
-Dream Studio exposes `154` AI tools. Every one of them is registered with the
+Morphus exposes `154` AI tools. Every one of them is registered with the
 browser over WebMCP by the same declarations, so the agent surface and the
 in-app Copilot's surface are the same list by construction.
 
@@ -255,7 +255,7 @@ This subsystem is currently best described as an admin/dev memory pipeline. The 
 
 ## Multilingual and voice-enabled content
 
-Dream Studio supports multilingual creation at the content layer:
+Morphus supports multilingual creation at the content layer:
 
 - Gemma 4 can receive multilingual prompts and generate NPC dialogue.
 - `server/npc-chat-shared.ts` routes NPC preview chat through Gemma 4.
@@ -356,7 +356,7 @@ Environment notes:
 
 ## AAA Worldbuilding Copilot Skill
 
-Dream Studio bundles the repository-owned `aaa-game-worldbuilding` skill from
+Morphus bundles the repository-owned `aaa-game-worldbuilding` skill from
 `.agents/skills/aaa-game-worldbuilding`. It guides Copilot through ambitious
 AAA-style environment production: composition, procedural foundations,
 authored gameplay landmarks, screenshot verification, and targeted performance

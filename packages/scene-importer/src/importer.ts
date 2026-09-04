@@ -474,7 +474,7 @@ function analyzeScript(
             createDiagnostic(
               "renderer-ownership",
               "warning",
-              `${constructorInfo.imported} ownership was stripped. Dream Studio keeps viewport renderer ownership.`,
+              `${constructorInfo.imported} ownership was stripped. Morphus keeps viewport renderer ownership.`,
               resolveTraversalFilename(path.hub, entrypoint)
             )
           );
@@ -532,7 +532,7 @@ function analyzeRuntimeCall(
 
   if (calleeName.startsWith("document.") || calleeName.includes("document.body") || calleeName.endsWith(".appendChild")) {
     analysis.diagnostics.push(
-      createDiagnostic("dom-ownership", "warning", "DOM ownership code was omitted. Dream Studio keeps renderer and shell ownership.", filename)
+      createDiagnostic("dom-ownership", "warning", "DOM ownership code was omitted. Morphus keeps renderer and shell ownership.", filename)
     );
     analysis.needsCustomScript = true;
   }

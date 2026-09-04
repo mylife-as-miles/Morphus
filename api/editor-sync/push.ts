@@ -6,6 +6,6 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(501).json({
-    error: "Live editor sync is only available in the local Dream Studio dev server."
+    error: "Live editor sync is only available in the local Morphus dev server."
   });
 }

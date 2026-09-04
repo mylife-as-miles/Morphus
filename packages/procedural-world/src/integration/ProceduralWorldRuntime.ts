@@ -1,7 +1,7 @@
 /**
  * Derived from LAAS/fable5-world-demo.
  * Original copyright (c) 2026 Remi Sebastian Kits.
- * Adapted for Dream Studio under the MIT License.
+ * Adapted for Morphus under the MIT License.
  */
 
 import { type PerspectiveCamera, type Scene } from 'three';

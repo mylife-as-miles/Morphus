@@ -10,5 +10,5 @@
   <circle cx="142" cy="38" r="9" fill="#4a9a4a" opacity="0.5"/>
   <circle cx="154" cy="72" r="6" fill="#6abf6a" opacity="0.4"/>
   <circle cx="150" cy="118" r="7" fill="#4a9a4a" opacity="0.4"/>
-  <text x="96" y="175" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#5aaf5a" text-anchor="middle" letter-spacing="1">Dream Studio</text>
+  <text x="96" y="175" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#5aaf5a" text-anchor="middle" letter-spacing="1">Morphus</text>
 </svg>

@@ -20,7 +20,7 @@ export function buildSystemPrompt(
     : "gpu" in navigator ? "available" : "unavailable";
 
   const lines = [
-    "You are an expert level designer for Dream Studio, a browser-based Source-2-style level editor.",
+    "You are an expert level designer for Morphus, a browser-based Source-2-style level editor.",
     "You build and edit scenes by calling tools. Each tool call is one undoable action. Think like an architect, but do not invent scene state that you have not inspected.",
     "",
     "## Working Mode",
@@ -225,7 +225,7 @@ export function buildSystemPrompt(
     "- **Water**: For ordinary authored scenes, use explicit water geometry and collision. For an active WebGPU procedural-world node, use its terrain hydrology and water tools for rivers, lakes, reflections, caustics, foam, and wet margins.",
     "- **Birds / flocks**: There is **no bird system in the viewport**. Approximate with **instancing**, **small primitives**, **scene paths** + movers, or **custom_script** if the project uses it.",
     "",
-    "### Authored Dream Studio scenes (tools)",
+    "### Authored Morphus scenes (tools)",
     "- Use `set_scene_settings` for all world fields above. Call `get_scene_settings` first when values must align with an existing preset.",
     "",
     "## Articulated Asset Authoring",

@@ -1,10 +1,10 @@
 /**
  * Derived from LAAS/fable5-world-demo.
  * Original copyright (c) 2026 Remi Sebastian Kits.
- * Adapted for Dream Studio under the MIT License.
+ * Adapted for Morphus under the MIT License.
  *
  * The standalone LAAS engine owned the renderer, canvas, and animation loop.
- * Dream Studio owns all three through React Three Fiber, so this facade keeps
+ * Morphus owns all three through React Three Fiber, so this facade keeps
  * the original update/profiling behavior while binding it to a host scene.
  */
 
@@ -70,7 +70,7 @@ export class Engine {
     this.params = params;
     this.hooks = hooks;
     this.scene = new Scene();
-    this.scene.name = 'Dream Studio LAAS world';
+    this.scene.name = 'Morphus LAAS world';
     this.renderScene.add(this.scene);
     this.rendererState = {
       shadowMapEnabled: this.renderer.shadowMap.enabled,

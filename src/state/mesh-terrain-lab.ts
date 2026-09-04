@@ -1,12 +1,12 @@
 /**
- * The vendored Mesh Terrain Lab's own stores, held for Dream Studio's UI.
+ * The vendored Mesh Terrain Lab's own stores, held for Morphus's UI.
  *
  * The lab is a complete editor: a `WorldTerrain` runtime plus four stores that
  * between them own render mode, sculpt tool state, forest fields, tree
  * prototypes and ground cover. Its React scene reads them directly, and its
  * panels write them.
  *
- * Route 2 keeps the runtime and throws the panels away -- Dream Studio's own UI
+ * Route 2 keeps the runtime and throws the panels away -- Morphus's own UI
  * writes these instead. So the stores live here as module singletons rather
  * than inside the canvas component: a tool panel in the editor shell has to
  * reach them, and it is nowhere near the React tree the scene lives in.

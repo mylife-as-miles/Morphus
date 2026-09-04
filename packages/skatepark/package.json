@@ -1,7 +1,7 @@
 {
   "name": "@blud/skatepark",
   "version": "0.1.11",
-  "description": "Procedural skatepark geometry and materials for Dream Studio authoring scenes.",
+  "description": "Procedural skatepark geometry and materials for Morphus authoring scenes.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,

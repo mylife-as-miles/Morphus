@@ -25,9 +25,9 @@ type HtmlJsImportDialogProps = {
 };
 
 const STATUS_COPY: Record<ImportStatus, string> = {
-  "entrypoint-required": "Choose which entry file should be analyzed before Dream Studio imports the scene.",
-  imported: "Supported scene content was converted into native Dream Studio nodes.",
-  "partially-imported": "Dream Studio converted supported content and generated a custom bridge script for the rest.",
+  "entrypoint-required": "Choose which entry file should be analyzed before Morphus imports the scene.",
+  imported: "Supported scene content was converted into native Morphus nodes.",
+  "partially-imported": "Morphus converted supported content and generated a custom bridge script for the rest.",
   unsupported: "The importer could not extract enough native scene content from this payload."
 };
 

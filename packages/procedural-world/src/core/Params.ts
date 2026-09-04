@@ -9,7 +9,7 @@ import {
 export type QualityPreset = 'low' | 'high' | 'ultra';
 
 export interface LaasParams {
-  /** canonical, normalized, preset-resolved Dream Studio runtime config */
+  /** canonical, normalized, preset-resolved Morphus runtime config */
   config: ProceduralWorldEffectiveConfig;
   /** world seed — reproduces the entire world */
   seed: number;

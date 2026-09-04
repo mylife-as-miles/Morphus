@@ -217,7 +217,7 @@ function findRavinePose(): Parameters<ProceduralWorldRuntime["setGroundRelativeP
 
 function addAuthoredRuin(scene: Scene, groundY: number): void {
   const ruin = new Group();
-  ruin.name = "Dream Studio Authored Highland Ruin";
+  ruin.name = "Morphus Authored Highland Ruin";
   ruin.position.set(1150, groundY - 1, 1500);
   ruin.scale.setScalar(2.2);
   const stone = new MeshStandardNodeMaterial({ color: 0x6f746e, roughness: 0.94, metalness: 0 });

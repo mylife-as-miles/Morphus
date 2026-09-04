@@ -120,10 +120,10 @@ export function EditorMenuBar({
             <BlobIcon className="size-3.5" />
           </span>
           <div className="hidden flex-col leading-none sm:flex">
-            <span className="text-[11px] font-semibold tracking-[0.24em] text-foreground/96 uppercase">Dream Studio</span>
+            <span className="text-[11px] font-semibold tracking-[0.24em] text-foreground/96 uppercase">Morphus</span>
             <span className="mt-1 text-[9px] tracking-[0.2em] text-[#f6d07d]/58 uppercase">World Editor</span>
           </div>
-          <span className="text-[11px] font-semibold tracking-[0.24em] text-foreground/96 uppercase sm:hidden">Dream Studio</span>
+          <span className="text-[11px] font-semibold tracking-[0.24em] text-foreground/96 uppercase sm:hidden">Morphus</span>
         </div>
 
         <div className="editor-toolbar-shell min-w-0 flex-1 overflow-hidden rounded-[18px] px-2 py-1.5">

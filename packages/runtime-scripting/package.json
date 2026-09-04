@@ -1,7 +1,7 @@
 {
   "name": "@blud/runtime-scripting",
   "version": "0.1.11",
-  "description": "Generated custom script runtime bridge for Dream Studio scenes.",
+  "description": "Generated custom script runtime bridge for Morphus scenes.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,

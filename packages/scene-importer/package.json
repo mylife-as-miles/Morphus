@@ -1,7 +1,7 @@
 {
   "name": "@blud/scene-importer",
   "version": "0.1.11",
-  "description": "Best-effort HTML/JS scene importer for Dream Studio authoring scenes.",
+  "description": "Best-effort HTML/JS scene importer for Morphus authoring scenes.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,

@@ -102,14 +102,14 @@ be wrong together.
 s = sub(s, "## LAAS Procedural Worlds", CITY, "city section")
 
 # ---- 3. Tool surface table ------------------------------------------------
-OLD_SURFACE = """In the submitted editor slice, Dream Studio exposes `112` AI tools.
+OLD_SURFACE = """In the submitted editor slice, Morphus exposes `112` AI tools.
 
 | Tool group | Count | Purpose |
 | --- | ---: | --- |
 | Copilot editor tools | 104 | Live 3D scene authoring, inspection, mesh editing, gameplay, behavior, surfaces, screenshots |
 | Morphus game tools | 8 | Standalone game registration and file workspace operations |
 """
-NEW_SURFACE = """Dream Studio exposes `154` AI tools. Every one of them is registered with the
+NEW_SURFACE = """Morphus exposes `154` AI tools. Every one of them is registered with the
 browser over WebMCP by the same declarations, so the agent surface and the
 in-app Copilot's surface are the same list by construction.
 

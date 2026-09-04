@@ -167,7 +167,7 @@ function registerEditorPresence(server: ViteDevServer | PreviewServer) {
     await upsertDevSyncRegistration({
       id: registrationId,
       kind: "editor",
-      name: "Dream Studio Editor",
+      name: "Morphus Editor",
       pid: process.pid,
       projectRoot: server.config.root,
       updatedAt: Date.now(),
@@ -213,7 +213,7 @@ function registerSelfGamePresence(server: ViteDevServer | PreviewServer) {
     await upsertDevSyncRegistration({
       id: registrationId,
       kind: "game",
-      name: "Dream Studio Preview",
+      name: "Morphus Preview",
       pid: process.pid,
       projectRoot: server.config.root,
       sceneIds: [],

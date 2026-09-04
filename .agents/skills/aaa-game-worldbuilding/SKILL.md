@@ -2,13 +2,13 @@
 name: aaa-game-worldbuilding
 description: >
   Create, evaluate, refine, and optimize ambitious AAA-style 3D game worlds
-  and levels in Dream Studio using procedural terrain, vegetation, lighting,
+  and levels in Morphus using procedural terrain, vegetation, lighting,
   atmosphere, water, motion, post-processing, gameplay, visual verification,
   and performance tools. Use for UE5-class, cinematic, open-world, realistic,
   highly detailed, next-generation, showcase-quality, large-scale, forest,
   mountain, river, biome, environment-art, level-design, and AAA game requests.
 license: MIT
-compatibility: Requires Dream Studio editor tools. Advanced procedural worlds require WebGPU.
+compatibility: Requires Morphus editor tools. Advanced procedural worlds require WebGPU.
 metadata:
   priority: high
   modes:
@@ -29,7 +29,7 @@ metadata:
 Use this skill for ambitious game worlds, environment-art work, cinematic or
 high-fidelity levels, and explicitly requested AAA or UE5-class visual targets.
 Do not activate it for isolated micro-edits such as moving a cube, recoloring a
-wall, or listing scene data. "UE5-class" is a visual target for Dream Studio's
+wall, or listing scene data. "UE5-class" is a visual target for Morphus's
 browser/WebGPU implementation, never a guarantee of Unreal Engine parity.
 
 ## Quality pillars
@@ -89,7 +89,7 @@ hardware limitations plainly.
 Read deeper material only when it helps the current task:
 
 - `PROJECT_LAAS_v2`: showcase-quality operating doctrine.
-- `procedural-world-tool-playbook`: real Dream Studio tool sequencing.
+- `procedural-world-tool-playbook`: real Morphus tool sequencing.
 - `environment-production-workflow`: natural-world and level workflow.
 - `composition-and-art-direction`: camera, landmark, color, and reference loop.
 - `gameplay-and-exploration`: routes, spawn, traversal, and specialized worlds.

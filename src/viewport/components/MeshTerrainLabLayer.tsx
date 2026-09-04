@@ -1,13 +1,13 @@
 /**
- * The vendored Mesh Terrain Lab's scene, drawn inside Dream Studio's viewport.
+ * The vendored Mesh Terrain Lab's scene, drawn inside Morphus's viewport.
  *
- * This is the whole point of route 2: keep Dream Studio's chrome -- its menubar,
+ * This is the whole point of route 2: keep Morphus's chrome -- its menubar,
  * tools panel, inspector, gizmos -- and put upstream's renderer under it, rather
  * than running upstream's editor beside ours at `?editor=terrain`.
  *
  * `TerrainScene` is mounted verbatim. It brings its own environment, post stack
  * and streaming scheduler, which is exactly what makes it look the way it does;
- * trying to reassemble those from Dream Studio's pipeline is how the earlier
+ * trying to reassemble those from Morphus's pipeline is how the earlier
  * geometry-only port ended up drawing a flat green mass.
  *
  * Two consequences worth knowing:
@@ -16,7 +16,7 @@
  *    upstream ships no WebGL path, so on the WebGL backend this renders
  *    nothing rather than falling back.
  *  - It owns tone mapping and the environment for the frame it is in, so
- *    Dream Studio's own sky and lighting are not additive with it.
+ *    Morphus's own sky and lighting are not additive with it.
  */
 
 import { Component, Suspense, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
@@ -39,7 +39,7 @@ import {
  * The scene is upstream's code running against our renderer, so the failure
  * modes are the seams between them -- a material the backend cannot compile, a
  * missing GPU limit. React's default is to unmount the entire tree above, which
- * takes Dream Studio's editor down with it; this keeps the rest of the viewport
+ * takes Morphus's editor down with it; this keeps the rest of the viewport
  * alive and puts the reason somewhere findable.
  */
 class MeshTerrainLabBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
