@@ -1,10 +1,9 @@
 /**
  * Draws the street network in the viewport.
  *
- * The whole network is one mesh. A downtown grid is hundreds of segments and
- * hundreds of draw calls for flat grey ground is the wrong place to spend a
- * frame, so carriageway, footway and junction are distinguished by a vertex
- * colour attribute rather than by separate materials.
+ * three-roads owns the deck, kerb returns and road paint. Its replaceable road
+ * chunks are merged into one surface buffer and one markings buffer here, with
+ * index groups retaining the upstream material classes.
  *
  * Streets are conformed to the same ground the forest is planted on. That is
  * not a detail: the viewport draws two different terrains depending on the
@@ -12,66 +11,87 @@
  * the hill it is supposed to cross.
  */
 
-import { useEffect, useMemo, useRef } from "react";
-import { BufferAttribute, BufferGeometry, type Mesh } from "three";
+import { useEffect, useMemo } from "react";
+import { BufferAttribute, BufferGeometry } from "three";
 import {
   buildMassingMesh,
-  buildRoadMesh,
+  buildRoadSurfaceMeshes,
   type GroundHeight,
   type MassingVolume,
-  type RoadNetwork
+  type RoadCrosswalk,
+  type RoadNetwork,
+  type RoadRenderMeshData
 } from "@blud/city";
 
 export type CityLayerProps = {
   network: RoadNetwork;
+  crosswalks?: readonly RoadCrosswalk[];
   /** Building volumes; empty until massing has been run. */
   massing?: readonly MassingVolume[];
   /** Samples terrain height; a flat plane at zero when the scene has none. */
   groundHeight?: GroundHeight;
+  /**
+   * Stable identity for the terrain revision sampled by `groundHeight`.
+   *
+   * Every editor pane creates its own sampling closure, so the function itself
+   * cannot identify equivalent terrain across canvases. The key lets those
+   * panes share the expensive renderer-neutral three-roads buffers while each
+   * canvas still owns and disposes its own BufferGeometry.
+   */
+  groundHeightCacheKey?: object;
   visible?: boolean;
   /** Called after a rebuild, so the store can clear its dirty flag. */
   onRebuilt?: () => void;
 };
 
 export function CityLayer({
+  crosswalks,
   groundHeight,
+  groundHeightCacheKey,
   massing,
   network,
   onRebuilt,
   visible = true
 }: CityLayerProps) {
-  const meshRef = useRef<Mesh | null>(null);
+  const roadMeshes = useMemo(() => {
+    try {
+      return getCachedRoadMeshes({
+        crosswalks,
+        groundHeight,
+        groundHeightCacheKey,
+        network
+      });
+    } catch (error) {
+      // A malformed authoring graph must not take the rest of the viewport
+      // down. Leaving the dirty flag set makes the failed rebuild truthful.
+      console.error("[CityLayer] three-roads compilation failed", error);
+      return null;
+    }
+  }, [crosswalks, groundHeight, groundHeightCacheKey, network]);
 
-  const geometry = useMemo(() => {
-    const data = buildRoadMesh({ groundHeight, network });
-    if (data.vertexCount === 0) return null;
-
-    const next = new BufferGeometry();
-    next.setAttribute("position", new BufferAttribute(data.positions, 3));
-    next.setAttribute("normal", new BufferAttribute(data.normals, 3));
-    next.setAttribute("uv", new BufferAttribute(data.uvs, 2));
-    next.setAttribute("color", new BufferAttribute(data.colors, 3));
-    next.setIndex(new BufferAttribute(data.indices, 1));
-    next.computeBoundingSphere();
-    return next;
-    // `groundHeight` is a new closure on most renders; keying on it would
-    // rebuild the whole network every frame. The network is what changes shape.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [network]);
+  const surfaceGeometry = useMemo(
+    () => roadMeshes ? createGeometry(roadMeshes.surface) : null,
+    [roadMeshes]
+  );
+  const markingGeometry = useMemo(
+    () => roadMeshes ? createGeometry(roadMeshes.markings) : null,
+    [roadMeshes]
+  );
 
   // Freeing the previous geometry is not optional here: a rebuilt downtown grid
   // is a few megabytes of buffers, and regenerating a city a dozen times while
   // tuning block size would otherwise leak all of them.
   useEffect(() => {
     return () => {
-      geometry?.dispose();
+      surfaceGeometry?.dispose();
+      markingGeometry?.dispose();
     };
-  }, [geometry]);
+  }, [markingGeometry, surfaceGeometry]);
 
   useEffect(() => {
-    if (geometry) onRebuilt?.();
+    if (roadMeshes) onRebuilt?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [geometry]);
+  }, [roadMeshes]);
 
   const massingGeometry = useMemo(() => {
     if (!massing || massing.length === 0) return null;
@@ -99,12 +119,31 @@ export function CityLayer({
 
   return (
     <group name="City">
-      {geometry ? (
-        <mesh geometry={geometry} name="CityStreets" receiveShadow ref={meshRef}>
-          {/* Vertex colours carry the surface distinction, so one material
-              covers carriageway, kerb and footway. Rough and unlit-looking on
-              purpose: asphalt has no interesting specular at city scale. */}
-          <meshStandardMaterial metalness={0} roughness={0.95} vertexColors />
+      {surfaceGeometry && roadMeshes ? (
+        <mesh geometry={surfaceGeometry} name="CityStreets" receiveShadow>
+          {roadMeshes.surface.groups.map(({ materialClass }, index) => (
+            <meshStandardMaterial
+              attach={`material-${index}`}
+              color={surfaceColour(materialClass)}
+              key={materialClass}
+              metalness={0}
+              roughness={materialClass === "road" ? 0.96 : 0.88}
+            />
+          ))}
+        </mesh>
+      ) : null}
+
+      {markingGeometry && roadMeshes ? (
+        <mesh geometry={markingGeometry} name="CityRoadMarkings" receiveShadow renderOrder={2}>
+          {roadMeshes.markings.groups.map(({ materialClass }, index) => (
+            <meshStandardMaterial
+              attach={`material-${index}`}
+              color={markingColour(materialClass)}
+              key={materialClass}
+              metalness={0}
+              roughness={0.82}
+            />
+          ))}
         </mesh>
       ) : null}
 
@@ -119,4 +158,78 @@ export function CityLayer({
       ) : null}
     </group>
   );
+}
+
+const NO_CROSSWALKS: readonly RoadCrosswalk[] = [];
+const FLAT_GROUND_CACHE_KEY = {};
+type RoadMeshes = ReturnType<typeof buildRoadSurfaceMeshes>;
+
+/**
+ * Network and authoring arrays are immutable store snapshots, which makes
+ * their identities reliable revision keys. Weak maps release old downtowns as
+ * soon as the store and its canvases stop referring to them.
+ */
+const roadMeshCache = new WeakMap<
+  RoadNetwork,
+  WeakMap<object, WeakMap<object, RoadMeshes>>
+>();
+
+function getCachedRoadMeshes({
+  crosswalks,
+  groundHeight,
+  groundHeightCacheKey,
+  network
+}: Pick<CityLayerProps, "crosswalks" | "groundHeight" | "groundHeightCacheKey" | "network">): RoadMeshes {
+  const crosswalkKey = crosswalks ?? NO_CROSSWALKS;
+  const groundKey = groundHeightCacheKey ?? groundHeight ?? FLAT_GROUND_CACHE_KEY;
+
+  let byCrosswalks = roadMeshCache.get(network);
+  if (!byCrosswalks) {
+    byCrosswalks = new WeakMap();
+    roadMeshCache.set(network, byCrosswalks);
+  }
+
+  let byGround = byCrosswalks.get(crosswalkKey);
+  if (!byGround) {
+    byGround = new WeakMap();
+    byCrosswalks.set(crosswalkKey, byGround);
+  }
+
+  const cached = byGround.get(groundKey);
+  if (cached) return cached;
+
+  const built = buildRoadSurfaceMeshes({ crosswalks, groundHeight, network });
+  byGround.set(groundKey, built);
+  return built;
+}
+
+function createGeometry(data: RoadRenderMeshData): BufferGeometry | null {
+  if (data.vertexCount === 0 || data.indices.length === 0) return null;
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new BufferAttribute(data.positions, 3));
+  geometry.setAttribute("normal", new BufferAttribute(data.normals, 3));
+  geometry.setAttribute("uv", new BufferAttribute(data.uvs, 2));
+  geometry.setIndex(new BufferAttribute(data.indices, 1));
+  for (let index = 0; index < data.groups.length; index += 1) {
+    const group = data.groups[index]!;
+    geometry.addGroup(group.indexStart, group.indexCount, index);
+  }
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+function surfaceColour(materialClass: string): string {
+  if (materialClass === "road") return "#35363a";
+  if (materialClass === "sidewalk" || materialClass.includes("paver")) return "#96928a";
+  if (materialClass === "shoulder") return "#716e68";
+  if (materialClass === "cycleway") return "#8b4a40";
+  if (materialClass === "median" || materialClass === "grass") return "#526345";
+  return "#77736d";
+}
+
+function markingColour(materialClass: string): string {
+  if (materialClass.endsWith("yellow")) return "#e7bb3d";
+  if (materialClass.endsWith("blue")) return "#4a91d8";
+  if (materialClass.endsWith("red")) return "#cb554a";
+  return "#f2efe4";
 }

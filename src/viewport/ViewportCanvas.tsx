@@ -3840,7 +3840,9 @@ export function ViewportCanvas({
         {/* Streets resolve their ground through the same function the forest
             does, so the two cannot disagree about where the terrain is. */}
         <CityLayer
+          crosswalks={city.crosswalks}
           groundHeight={cityGroundHeight}
+          groundHeightCacheKey={meshTerrainNode ?? city.network}
           massing={city.massing}
           network={city.network}
           onRebuilt={handleCityRebuilt}

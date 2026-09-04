@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "@blud/city",
   "version": "0.1.0",
   "description": "Procedural cities: street networks, block subdivision, and building generation.",
@@ -16,7 +16,11 @@
     "prepublishOnly": "npm run build"
   },
   "publishConfig": { "access": "public" },
-  "dependencies": { "@blud/shared": "*" },
+  "dependencies": {
+    "@blud/shared": "*",
+    "@three-roads/core": "0.1.0",
+    "@three-roads/mesher": "0.1.0"
+  },
   "peerDependencies": { "three": ">=0.184.0" }
 }
 

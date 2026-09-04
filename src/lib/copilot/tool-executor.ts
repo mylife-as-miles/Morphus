@@ -2462,7 +2462,7 @@ async function executeToolInner(editor: EditorCore, name: string, args: Args, co
       });
     }
 
-    // -- Forests -----------------------------------------------------------
+    // -- Cities ------------------------------------------------------------
 
     case "generate_street_grid": {
       const columns = Math.round(num(args, "columns", 6));
@@ -2496,10 +2496,10 @@ async function executeToolInner(editor: EditorCore, name: string, args: Args, co
     }
 
     case "get_street_network": {
-      const { network } = cityStore.getSnapshot();
+      const { crosswalks, network } = cityStore.getSnapshot();
       const segments = Object.values(network.segments);
       const nodes = Object.values(network.nodes);
-      if (nodes.length === 0) return ok({ junctions: 0, segments: 0, status: "No streets yet." });
+      if (nodes.length === 0) return ok({ crosswalks: 0, junctions: 0, segments: 0, status: "No streets yet." });
 
       let minX = Infinity;
       let maxX = -Infinity;
@@ -2513,6 +2513,7 @@ async function executeToolInner(editor: EditorCore, name: string, args: Args, co
       }
 
       return ok({
+        crosswalks: crosswalks.length,
         extentMeters: {
           maxX: Math.round(maxX),
           maxZ: Math.round(maxZ),
@@ -2560,6 +2561,24 @@ async function executeToolInner(editor: EditorCore, name: string, args: Args, co
       }
 
       return ok({ from: fromId, roadClass, segmentId: id, to: toId });
+    }
+
+    case "add_crosswalk": {
+      const segmentId = str(args, "segmentId");
+      const segment = cityStore.getSnapshot().network.segments[segmentId];
+      if (!segment) return fail(`Street segment ${segmentId} does not exist.`);
+
+      const position = num(args, "position", 0.5);
+      if (position < 0 || position > 1) return fail("position must be between 0 and 1.");
+      const width = num(args, "width", 4);
+      if (width <= 0) return fail("width must be greater than 0.");
+
+      const id = `crosswalk_${Date.now().toString(36)}`;
+      if (!cityStore.addCrosswalk({ id, position, segmentId, width })) {
+        return fail(`Could not attach a crossing to street segment ${segmentId}.`);
+      }
+
+      return ok({ crosswalkId: id, position, segmentId, width });
     }
 
     case "clear_street_network": {

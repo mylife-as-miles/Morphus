@@ -2011,6 +2011,20 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
     }
   },
   {
+    name: "add_crosswalk",
+    description:
+      "Paints a zebra crossing across one existing street segment. Use get_street_network first to choose a segment. The crossing follows the compiled road surface and terrain.",
+    parameters: {
+      type: "object",
+      properties: {
+        segmentId: { type: "string", description: "Source street segment that owns the crossing." },
+        position: { type: "number", description: "Position from 0 at the segment start to 1 at its end. Defaults to 0.5." },
+        width: { type: "number", description: "Crossing length along the street in metres. Defaults to 4." }
+      },
+      required: ["segmentId"]
+    }
+  },
+  {
     name: "clear_street_network",
     description: "Removes every street and junction. The terrain and everything else in the scene are untouched.",
     parameters: { type: "object", properties: {} }

@@ -53,6 +53,16 @@ export interface RoadNetwork {
   segments: Record<string, RoadSegment>
 }
 
+/** A zebra crossing positioned along one source graph segment. */
+export interface RoadCrosswalk {
+  id: string
+  segmentId: string
+  /** Zero is the segment's `from` node and one is its `to` node. */
+  position: number
+  /** Length of the striped band along the street, in metres. */
+  width: number
+}
+
 /** Sensible starting widths, in metres, by street class. */
 export const ROAD_CLASS_DEFAULTS: Record<RoadClass, { width: number; sidewalkWidth: number; lanes: number }> = {
   alley: { width: 5, sidewalkWidth: 0, lanes: 1 },

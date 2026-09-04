@@ -11,6 +11,7 @@
 import type { MassingVolume } from '../massing/massing'
 import {
   emptyRoadNetwork,
+  type RoadCrosswalk,
   type RoadClass,
   type RoadNetwork,
   type RoadSegment
@@ -19,6 +20,8 @@ import { ROAD_CLASS_DEFAULTS } from './roadNetwork'
 
 export interface CitySnapshot {
   network: RoadNetwork
+  /** Authored paint attached to source graph segments. */
+  crosswalks: RoadCrosswalk[]
   /** Set when the network changed and the mesh no longer matches it. */
   needsRebuild: boolean
   /** Bumped on every rebuild, so viewers can key off a generation. */
@@ -52,6 +55,7 @@ export class CityStore {
 
   private state: CitySnapshot = {
     blockCorners: [],
+    crosswalks: [],
     generation: 0,
     massing: [],
     needsRebuild: false,
@@ -82,6 +86,7 @@ export class CityStore {
     // leave buildings standing in the middle of the new streets.
     this.emit({
       blockCorners,
+      crosswalks: [],
       massing: [],
       massingSummary: undefined,
       needsRebuild: true,
@@ -93,6 +98,7 @@ export class CityStore {
   clear(): void {
     this.emit({
       blockCorners: [],
+      crosswalks: [],
       massing: [],
       massingSummary: undefined,
       needsRebuild: true,
@@ -179,6 +185,16 @@ export class CityStore {
       segments: { ...this.state.network.segments, [id]: { ...existing, ...values, id } }
     }
     this.emit({ needsRebuild: true, network })
+    return true
+  }
+
+  /** Adds paint only when its source segment still exists. */
+  addCrosswalk(crosswalk: RoadCrosswalk): boolean {
+    if (!this.state.network.segments[crosswalk.segmentId]) return false
+    this.emit({
+      crosswalks: [...this.state.crosswalks.filter(({ id }) => id !== crosswalk.id), crosswalk],
+      needsRebuild: true
+    })
     return true
   }
 

@@ -12,7 +12,7 @@
     "pretypecheck": "node scripts/generate-copilot-skills-manifest.mjs",
     "typecheck": "tsc --noEmit",
     "pretest": "node scripts/generate-copilot-skills-manifest.mjs",
-    "test": "tsx --test src/lib/copilot/skill-service.test.ts src/lib/procedural-world/procedural-world-config.test.ts",
+    "test": "tsx --test src/lib/copilot/skill-service.test.ts src/lib/procedural-world/procedural-world-config.test.ts packages/city/src/geometry/threeRoads.test.ts",
     "preview": "vite preview"
   },
   "overrides": {
