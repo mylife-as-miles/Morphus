@@ -5,7 +5,7 @@ forests you can grow, and a scene you can build, running on WebGPU.
 
 ## WebMCP: the editor is the agent's tool surface
 
-Morphus registers all 145 of the editor's own tools with the browser via
+Morphus registers all 154 of the editor's own tools with the browser via
 `document.modelContext.registerTool`, so an agent can build a world *in the page
 the person is looking at* -- no server, no API key, no separate MCP process, and
 no copy of the editor's logic that can fall out of step.
@@ -24,16 +24,16 @@ await document.modelContext.registerTool(
 ```
 
 The interesting part is what is *not* here. There is no second implementation.
-The editor already described everything it can do to its own Copilot -- 145
+The editor already described everything it can do to its own Copilot -- 154
 declarations, each with a description and a JSON Schema, executed by one
 switch. WebMCP asks for exactly that shape, so
 [`src/lib/webmcp/tools.ts`](src/lib/webmcp/tools.ts) is a bridge: a browser
 agent and the in-app Copilot run the same code, and neither can drift.
 
-**All 145, ordered.** An earlier version exposed a curated twenty, on the
+**All 154, ordered.** An earlier version exposed a curated twenty, on the
 theory that a tool list is a prompt and every entry spends the agent's
 attention. That holds for a short catalogue, but it cuts the other way here:
-the editor's real capability *is* the 145, and an agent that cannot inset a
+the editor's real capability *is* the 154, and an agent that cannot inset a
 face or rebuild a navmesh is operating a demo of the editor rather than the
 editor. Curation became the agent's job, so the bridge does two things to make
 that job possible -- it leads the list with the read and world-building tools
@@ -42,7 +42,7 @@ a catalogue top-down, and it annotates every entry so read-only tools are
 callable speculatively and mutations are not.
 
 Read-only is derived from the tool name rather than hand-listed, because a
-hand-kept set of 25 beside 145 declarations goes stale the first time someone
+hand-kept set of 25 beside 154 declarations goes stale the first time someone
 adds a `get_`. The one tool whose name lies about what it does
 (`capture_mesh_modeling_base` writes a modelling stack) is named as an
 exception in the source.
@@ -77,7 +77,7 @@ Without the flag, `?webmcp=stub` installs a minimal `modelContext` and a
 `window.__webmcp` harness so the tools can be driven straight from the console:
 
 ```js
-await window.__webmcp.list();                    // all 145 registered names
+await window.__webmcp.list();                    // all 154 registered names
 await window.__webmcp.describe("create_mesh_terrain");  // the schema an agent sees
 await window.__webmcp.call("create_mesh_terrain", { name: "Ridge" });
 ```
@@ -86,6 +86,47 @@ The stub is not an agent and does not pretend to be one -- there is no model in
 it. It answers the deterministic half of the question ("did this tool run and
 return what it promised") that Chrome's own guidance says to settle before
 writing evals.
+
+## Procedural cities
+
+A city is generated in four passes, each its own tool, because each decides
+something the next one needs and an author will want to stop between them.
+
+| Pass | Tool | What it decides |
+| --- | --- | --- |
+| Streets | `generate_street_grid` | Avenues, cross streets, junctions, kerbs and footways, conformed to terrain |
+| Blocks and lots | `generate_city_massing` | The buildable ground between streets, divided into lots that front them |
+| Massing | *(same call)* | The skyline, as flat coloured volumes |
+| Facades | `generate_city_buildings` | Real architecture on the lots that earn it |
+
+The pipeline deliberately mirrors `@blud/forest`. A forest is a spline field
+that places tree prototypes on terrain; a city is a street network that places
+building prototypes on lots. The expensive machinery is the same either way.
+
+**Streets are meshed by [`three-roads`](https://github.com/vibe-stack/three-roads)**,
+an OpenDRIVE-style model with real lanes, kerb returns and paint. The two
+representations disagree about topology, which is what
+`packages/city/src/geometry/threeRoads.ts` exists to reconcile: this repository
+stores one segment per block edge, because
+blocks and lots need that identity, while three-roads only produces a proper
+intersection when the uninterrupted avenue arrives as a single stroke.
+
+**Buildings come from [`procedural-bank`](https://github.com/vibe-stack/procedural-bank)**,
+vendored under `packages/city/src/buildings/vendor` because upstream is an
+application with nothing published. Only a few dozen are generated, and that is
+measured rather than timid: about 142,000 triangles per building, of which
+turning off every ornament, colonnade and crown saves 17%. Building a whole grid
+would be tens of millions of triangles and minutes of blocking work, so
+landmarks stand among massing boxes instead. Its vocabulary is limestone banks
+and setback towers, with no brownstones or tenements, which is the other reason
+the periphery stays as massing.
+
+**Everything placed on the ground resolves its height through
+`src/viewport/ground-height.ts`.** The viewport draws two different terrains
+depending on renderer backend and they differ by about thirty metres, so a
+system that samples its own answer eventually places itself underground and
+reports success. One function means forests, streets and buildings can only ever
+be wrong together.
 
 ## LAAS Procedural Worlds
 
@@ -123,8 +164,6 @@ For the Gemma 4 Good Hackathon, this editor is positioned under Digital Equity &
 
 ## What it does
 
-The editor has two AI workspaces.
-
 ### Copilot
 
 Copilot edits the live Dream Studio viewport. It can create and refine 3D scenes by calling structured tools against the editor command stack.
@@ -136,24 +175,9 @@ Copilot can:
 - Edit meshes with extrusion, bevel, inset, bridge, cuts, welds, subdivision, solidify, mirror, vertex transforms, UVs, surface painting, decals, LOD metadata, and bake outputs.
 - Author scene paths, gameplay hooks, behavior trees, and NPC/entity workflows.
 - Capture viewport screenshots so Gemma 4 can inspect what was actually built before continuing.
+- Lay street networks, divide blocks into lots, raise massing, and generate landmark buildings.
 - Push authored scenes into connected game projects when sync is configured.
 
-### Morphus
-
-Morphus creates standalone browser games and interactive prototypes. It maintains a local file workspace with generated HTML, CSS, JavaScript, JSON, image assets, and audio assets.
-
-Morphus can:
-
-- Generate playable multi-file web games.
-- Import files, folders, and reference images.
-- Preserve generated files in IndexedDB.
-- Search project files before editing.
-- Read bounded line ranges instead of scanning entire files.
-- Write targeted changes to existing files.
-- Create new modules when needed.
-- Request approval before destructive delete/rename operations.
-- Preview games, play them in the editor viewport, and export ZIP files.
-- Request ElevenLabs music or sound effects through a human approval tray.
 
 ## Gemma 4 architecture
 
@@ -183,12 +207,17 @@ This lets Gemma 4 help inside the editor workflow, not just generate text beside
 
 ## Tool surface
 
-In the submitted editor slice, Dream Studio exposes `112` AI tools.
+Dream Studio exposes `154` AI tools. Every one of them is registered with the
+browser over WebMCP by the same declarations, so the agent surface and the
+in-app Copilot's surface are the same list by construction.
 
 | Tool group | Count | Purpose |
 | --- | ---: | --- |
-| Copilot editor tools | 104 | Live 3D scene authoring, inspection, mesh editing, gameplay, behavior, surfaces, screenshots |
-| Morphus game tools | 8 | Standalone game registration and file workspace operations |
+| Scene authoring and inspection | 145 | Terrain, forests, meshes, primitives, materials, gameplay, behaviour, surfaces, screenshots |
+| Procedural cities | 9 | Street networks, crosswalks, block massing, landmark buildings |
+
+`node scripts/webmcp-budget.mjs` reports the live count and fails if any name,
+description or parameter is over Chrome's budgets.
 
 Key files:
 
@@ -218,12 +247,11 @@ The result is closer to human creative iteration: build, look, adjust.
 
 The editor includes a game-code memory subsystem for grounding future game generation:
 
-- `src/components/morphus-rag/RagIngestionUI.tsx` exposes the admin ingestion UI.
 - `api/rag/upsert-game-code.ts` chunks code, embeds it, writes snapshots, and upserts vectors.
 - `../../src/rag/embedGemini.ts` creates Gemini embeddings.
 - `../../src/rag/searchCode.ts` queries Pinecone and formats retrieved code context.
 
-This subsystem is currently best described as an admin/dev memory pipeline. The next planned step is exposing retrieval as a first-class Morphus tool so Gemma 4 can autonomously search examples before generating or debugging games.
+This subsystem is currently best described as an admin/dev memory pipeline. The next planned step is exposing retrieval as a first-class Copilot tool, so the model can search examples before generating or debugging.
 
 ## Multilingual and voice-enabled content
 
@@ -251,7 +279,9 @@ This is not full editor UI localization yet. The accurate claim is multilingual 
 - Pinecone
 - Gemini embeddings
 - ElevenLabs audio
-- Custom `@blud/*` editor, geometry, runtime, render, shared, and worker packages
+- `@three-roads/core` and `@three-roads/mesher` for road geometry
+- `procedural-bank` shape grammar, vendored, for landmark buildings
+- Custom `@blud/*` editor, city, forest, terrain, geometry, runtime, render, shared, and worker packages
 
 ## Run locally
 
@@ -317,10 +347,11 @@ Environment notes:
 | Tool execution | `src/lib/copilot/tool-executor.ts` |
 | Mode/runtime hook | `src/app/hooks/useCopilot.ts` |
 | Copilot UI | `src/components/editor-shell/CopilotPanel.tsx` |
-| Morphus UI | `src/components/editor-shell/MorphusWorkspace.tsx` |
-| Morphus memory | `src/lib/copilot/morphus-memory.ts` |
+| WebMCP bridge | `src/lib/webmcp/tools.ts`, `src/lib/webmcp/useWebMcp.ts`, `src/lib/webmcp/stub.ts` |
+| City pipeline | `packages/city/src/` |
+| Ground height | `src/viewport/ground-height.ts` |
 | NPC dialogue | `server/npc-chat-shared.ts`, `src/lib/preview-npc-chat.ts` |
-| Game-code memory | `src/components/morphus-rag/RagIngestionUI.tsx`, `api/rag/upsert-game-code.ts`, `../../src/rag` |
+| Game-code memory | `api/rag/upsert-game-code.ts`, `src/rag` |
 | Vite API plugins | `vite.config.ts`, `server/*-api.ts` |
 
 ## AAA Worldbuilding Copilot Skill
@@ -368,3 +399,9 @@ Example prompts:
 ## Licence
 
 MIT -- see [LICENSE](LICENSE).
+
+Third-party code, both MIT:
+
+- [`three-roads`](https://github.com/vibe-stack/three-roads), an npm dependency.
+- [`procedural-bank`](https://github.com/vibe-stack/procedural-bank), vendored
+  unmodified under `packages/city/src/buildings/vendor` with its licence alongside.
