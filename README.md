@@ -222,9 +222,10 @@ description or parameter is over Chrome's budgets.
 Key files:
 
 - `src/lib/copilot/tool-declarations.ts` defines the tool catalog.
-- `src/lib/copilot/tool-executor.ts` maps tool calls to editor and Morphus operations.
+- `src/lib/copilot/tool-executor.ts` maps tool calls to editor operations.
 - `src/lib/copilot/agentic-loop.ts` runs the model/tool iteration.
-- `src/app/hooks/useCopilot.ts` selects Copilot vs Morphus mode and assembles runtime context.
+- `src/app/hooks/useCopilot.ts` assembles the runtime context a tool call executes against.
+- `src/lib/webmcp/tools.ts` bridges the same declarations to the browser's agent.
 - `server/copilot-generate-shared.ts` calls Gemma 4 with function calling enabled.
 
 ## Visual verification
@@ -331,7 +332,9 @@ PINECONE_INDEX_HOST=your_pinecone_index_host
 
 Environment notes:
 
-- `GEMINI_API_KEY` or `GOOGLE_API_KEY` enables Gemma 4 Copilot, Morphus, and NPC dialogue.
+- `GEMINI_API_KEY` or `GOOGLE_API_KEY` enables the Gemma 4 Copilot and NPC dialogue.
+  An agent driving the editor over WebMCP needs neither: it brings its own model,
+  which is most of the point.
 - `PINECONE_API_KEY` plus `PINECONE_INDEX_HOST` enables game-code memory upserts/search.
 - `FAL_KEY` enables optional object/texture generation paths.
 - ElevenLabs keys are entered in the editor settings UI and stored locally in the browser.
