@@ -3660,63 +3660,79 @@ export function ViewportCanvas({
     ]
   );
 
-  // Wakes R3F when the viewport goes from zero-sized to visible.
+  // Holds the canvas back until the viewport has a real size.
   //
-  // `offsetSize` above covers the ordinary case, but there is one it cannot:
-  // if the whole document is zero-sized when the editor mounts -- a hidden
+  // If the whole document is zero-sized when the editor mounts -- a hidden
   // pane, a collapsed split, a tab restored in the background -- R3F declines
-  // to build its root, and the size change that follows can be coalesced into
-  // the same layout pass that the observer already reported on. The canvas
-  // then sits at its intrinsic 300x150 with no renderer for the life of the
-  // page, which reads as "the 3D viewport is broken" rather than as a
-  // measurement problem.
+  // to build its root, correctly, because a zero-sized canvas has nothing to
+  // render into. The size that arrives afterwards never reaches its own
+  // measurement, and the canvas then sits at its intrinsic 300x150 with no
+  // renderer for the life of the page, which reads as "the 3D viewport is
+  // broken" rather than as a measurement problem.
   //
-  // Watching for the zero-to-nonzero transition and re-broadcasting it costs a
-  // single observer and turns a dead viewport into a late one.
+  // An earlier fix dispatched a window resize once the viewport gained size.
+  // That did wake R3F, but on WebGPU the renderer had by then been built
+  // against the 300x150 default and had allocated its depth texture at that
+  // size. The colour attachments resized with the canvas and the depth
+  // attachment did not, so every frame failed validation --
+  //
+  //   The depth stencil attachment size (width: 300, height: 150) does not
+  //   match the size of the other attachments' base plane (width: 883, ...)
+  //
+  // -- and the viewport rendered black. Waking a renderer that was built wrong
+  // is a worse position than not having built it yet, so this defers the mount
+  // until there is a size worth building against.
+  const [canvasReady, setCanvasReady] = useState(false);
+
   useEffect(() => {
     const host = viewportRootRef.current;
     if (!host) return;
 
-    // The wake-up is only *needed* while the canvas sits at the HTML default of
-    // 300x150, which is what an unclaimed canvas looks like. Once R3F has sized
-    // it to the container there is nothing left to do and this stops for good.
-    const needsWaking = () => {
-      const canvas = host.querySelector("canvas");
-      if (!canvas) return true;
-      return canvas.clientWidth === 300 && canvas.clientHeight === 150;
+    const check = () => {
+      const { height, width } = host.getBoundingClientRect();
+      if (width === 0 || height === 0) return false;
+      setCanvasReady(true);
+      return true;
     };
+
+    if (check()) return;
 
     // A timer rather than `requestAnimationFrame`. The case this exists for is
     // a viewport that is not being composited -- a hidden pane, a background
     // tab, a collapsed panel -- and a page in that state does not run animation
     // frames at all, so a rAF loop is precisely the one mechanism guaranteed to
     // be asleep exactly when it is needed. Timers keep running there, throttled.
-    const POLL_MS = 250;
-    let sizedTicks = 0;
-
     const timer = window.setInterval(() => {
-      if (!needsWaking()) {
-        window.clearInterval(timer);
-        return;
-      }
-
-      const { height, width } = host.getBoundingClientRect();
-      if (width === 0 || height === 0) return;
-
-      // `react-use-measure`, which R3F measures through, listens for window
-      // resizes; this is the signal that reaches it from out here.
-      window.dispatchEvent(new Event("resize"));
-
-      // Give up only after the viewport has had a real size for a while --
-      // never while it is still collapsed. A viewport can sit at zero for
-      // minutes behind a hidden pane, and a budget that counts those ticks
-      // expires long before anyone looks at it.
-      sizedTicks += 1;
-      if (sizedTicks > 40) window.clearInterval(timer);
-    }, POLL_MS);
+      if (check()) window.clearInterval(timer);
+    }, 250);
 
     return () => window.clearInterval(timer);
   }, []);
+
+  // Tells R3F to measure, once the canvas it should measure actually exists.
+  //
+  // Deferring the mount is only half of it. R3F measures through
+  // `react-use-measure`, whose ResizeObserver does not fire while the page is
+  // not being composited -- so on a hidden pane the canvas mounts into a
+  // container of the right size and is still never claimed. `react-use-measure`
+  // also listens for window resizes, and that signal does arrive, so this
+  // supplies one. Because the mount is now gated, the size it measures is the
+  // real one and the renderer is built against it the first time.
+  useEffect(() => {
+    if (!canvasReady) return;
+
+    let remaining = 12;
+    const nudge = () => {
+      window.dispatchEvent(new Event("resize"));
+      remaining -= 1;
+      if (remaining <= 0) window.clearInterval(timer);
+    };
+
+    const timer = window.setInterval(nudge, 250);
+    nudge();
+
+    return () => window.clearInterval(timer);
+  }, [canvasReady]);
 
   const marqueeRect = marquee ? createScreenRect(marquee.origin, marquee.current) : undefined;
   const cameraControlsEnabled =
@@ -3758,6 +3774,9 @@ export function ViewportCanvas({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
+      {/* Deferred until the viewport has a size -- see the effect above for
+          why a renderer built at 300x150 cannot be repaired by resizing it. */}
+      {canvasReady ? (
       <Canvas
         camera={canvasCamera}
         dpr={Math.max(0.5, Math.min((typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1) * dprScale, 2.5))}
@@ -4043,6 +4062,7 @@ export function ViewportCanvas({
           />
         ) : null}
       </Canvas>
+      ) : null}
 
       {proceduralWorldStatus.kind === "unsupported" || proceduralWorldStatus.kind === "error" ? (
         <div className="absolute inset-x-3 top-3 z-20 border border-red-500/50 bg-red-950/90 px-3 py-2 text-xs text-red-100">
